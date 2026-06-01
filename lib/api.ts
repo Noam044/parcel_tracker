@@ -11,6 +11,14 @@ export interface TrackingData {
   status: 'In Transit' | 'Delivered' | 'Pending' | 'Exception';
   estimatedDelivery?: string;
   events: TrackingEvent[];
+  destination?: {
+    label: string;
+    coordinates: [number, number];
+  };
+  origin?: {
+    label: string;
+    coordinates: [number, number];
+  };
 }
 
 export async function fetchTrackingData(trackingNumber: string): Promise<TrackingData> {

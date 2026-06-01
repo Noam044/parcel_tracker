@@ -119,6 +119,9 @@ export default function Home() {
             <Map 
               events={trackingData?.events} 
               currentLocation={trackingData?.events[0]?.coordinates}
+              destination={trackingData?.destination}
+              origin={trackingData?.origin}
+              status={trackingData?.status}
             />
           </div>
         </div>
