@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# environment variables
+.env*.local
+
+# debug
+npm-debug.log*
+
+# misc
+.DS_Store
+*.tgz
+
+# duplicated subfolder
+parcel-tracker/
