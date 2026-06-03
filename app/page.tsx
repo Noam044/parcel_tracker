@@ -4,7 +4,7 @@ import Map from "@/components/Map";
 import TrackingForm from "@/components/TrackingForm";
 import { fetchTrackingData, TrackingData } from "@/lib/api";
 import { useState } from "react";
-import { Package, Truck, CheckCircle2, AlertCircle } from "lucide-react";
+import { Package, Truck, CheckCircle2, AlertCircle, CalendarClock } from "lucide-react";
 
 export default function Home() {
   const [trackingData, setTrackingData] = useState<TrackingData | null>(null);
@@ -79,19 +79,41 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-slate-200">
+                {/* Arrivée estimée */}
+                {trackingData.estimatedDelivery && (
+                  <div className="mb-8 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <CalendarClock className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-blue-500 uppercase tracking-wide">Arrivée estimée</p>
+                        <p className="text-sm font-bold text-slate-900">
+                          {new Date(trackingData.estimatedDelivery).toLocaleDateString('fr-FR', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="relative pl-8 border-l-2 border-slate-200 space-y-6">
                   {trackingData.events.map((event, index) => (
-                    <div key={index} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-white shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+                    <div key={index} className="relative">
+                      {/* Timeline dot */}
+                      <div className="absolute -left-[calc(2rem+5px)] flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-white shadow z-10">
                         <div className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : 'bg-slate-300'}`} />
                       </div>
                       
-                      <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 hover:shadow-md">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-bold text-slate-900 text-sm">{event.location}</h3>
-                        </div>
-                        <p className="text-slate-600 text-sm mb-2">{event.description}</p>
-                        <time className="text-xs font-medium text-slate-400 flex items-center">
+                      {/* Event card */}
+                      <div className="p-4 rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-200 hover:shadow-md">
+                        <h3 className="font-bold text-slate-900 text-sm mb-1">{event.location}</h3>
+                        <p className="text-slate-600 text-sm mb-2 break-words">{event.description}</p>
+                        <time className="text-xs font-medium text-slate-400">
                           {new Date(event.date).toLocaleString('fr-FR', {
                             day: 'numeric',
                             month: 'short',

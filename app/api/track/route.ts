@@ -433,10 +433,40 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Calculer l'estimation de livraison
+    let estimatedDelivery: string | undefined;
+
+    // 1. Essayer d'extraire l'EDD fournie par le transporteur via 17TRACK
+    const edd = trackInfo.latest_status?.estimated_delivery_date
+      || trackInfo.shipping_info?.estimated_delivery_date
+      || trackInfo.time_metrics?.estimated_delivery_time;
+    
+    if (edd) {
+      estimatedDelivery = edd;
+    } else if (status !== 'Delivered' && events.length > 0) {
+      // 2. Estimer à partir de la date du premier événement + délai typique
+      const oldestEventDate = events[events.length - 1]?.date;
+      if (oldestEventDate) {
+        const firstDate = new Date(oldestEventDate);
+        if (!isNaN(firstDate.getTime())) {
+          // Délai estimé selon la route (international ~10-15j, domestique ~5-7j)
+          const originCC = shippingInfo?.shipper_address?.country;
+          const destCC = shippingInfo?.recipient_address?.country;
+          const isInternational = originCC && destCC && originCC !== destCC;
+          const estimatedDays = isInternational ? 12 : 5;
+          
+          const estimated = new Date(firstDate);
+          estimated.setDate(estimated.getDate() + estimatedDays);
+          estimatedDelivery = estimated.toISOString();
+        }
+      }
+    }
+
     const result: TrackingData = {
       trackingNumber,
       carrier: carrierName,
       status,
+      estimatedDelivery,
       events,
       origin,
       destination,
