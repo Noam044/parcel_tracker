@@ -20,6 +20,7 @@ const martianMono = Martian_Mono({
 export const metadata: Metadata = {
   title: "Parcel Tracker",
   description: "Suivez vos colis en temps réel et visualisez leur itinéraire sur une carte.",
+  authors: [{ name: "Noam Bouriche", url: "https://noambouriche.fr" }],
 };
 
 export default function RootLayout({
