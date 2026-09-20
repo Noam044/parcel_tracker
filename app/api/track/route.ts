@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { buildTrackingData } from '@/lib/tracking';
 import { API_KEY_PLACEHOLDER, getTrackInfo, registerNumber, UpstreamError } from '@/lib/track17';
-import type { ApiError } from '@/lib/types';
+import type { ApiError, ApiPending } from '@/lib/types';
 
 // 17TRACK accepte des numéros de 5 à 50 caractères
 const TRACKING_NUMBER_PATTERN = /^[A-Za-z0-9_-]{5,50}$/;
@@ -31,18 +31,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const trackInfo = await getTrackInfo(apiKey, trackingNumber);
+    const result = await getTrackInfo(apiKey, trackingNumber);
 
-    if (!trackInfo) {
-      // Numéro inconnu de 17TRACK : on l'enregistre pour qu'il commence à le suivre
-      await registerNumber(apiKey, trackingNumber);
-      return fail(
-        'Le colis est en cours de recherche dans le réseau mondial. Veuillez réessayer dans quelques minutes.',
-        202
-      );
+    if (result.status === 'ready') {
+      return Response.json(await buildTrackingData(trackingNumber, result.info));
     }
 
-    return Response.json(await buildTrackingData(trackingNumber, trackInfo));
+    // Numéro inconnu de 17TRACK : on l'enregistre pour qu'il commence à le suivre
+    if (result.status === 'unregistered') {
+      await registerNumber(apiKey, trackingNumber);
+    }
+    // Le client réessaiera lui-même : ce n'est pas une erreur
+    return Response.json({ pending: true } satisfies ApiPending, { status: 202 });
   } catch (error) {
     if (error instanceof UpstreamError) {
       return fail(error.message, 502);

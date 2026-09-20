@@ -15,7 +15,8 @@ export default function TrackingForm({ onSearch, isLoading }: TrackingFormProps)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isEmpty && !isLoading) {
+    // Relancer une recherche pendant qu'une autre est en cours remplace simplement la précédente
+    if (!isEmpty) {
       onSearch(trackingNumber.trim());
     }
   };
@@ -35,12 +36,11 @@ export default function TrackingForm({ onSearch, isLoading }: TrackingFormProps)
           placeholder="Numéro de suivi (ex: AS123456789CN)..."
           spellCheck={false}
           className="block w-full pl-12 pr-32 py-4 bg-transparent border-none text-slate-900 placeholder-slate-400 focus:outline-none sm:text-base font-medium"
-          disabled={isLoading}
         />
         <div className="absolute inset-y-1.5 right-1.5 flex items-center">
           <button
             type="submit"
-            disabled={isLoading || isEmpty}
+            disabled={isEmpty}
             className="inline-flex items-center justify-center px-6 py-2.5 border border-transparent text-sm font-semibold rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {isLoading ? (

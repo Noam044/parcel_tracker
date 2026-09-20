@@ -30,3 +30,8 @@ export interface TrackingData {
 export interface ApiError {
   error: string;
 }
+
+/** Le numéro est connu de 17TRACK mais n'a pas encore de données de suivi. */
+export interface ApiPending {
+  pending: true;
+}

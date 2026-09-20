@@ -45,11 +45,21 @@ export interface RawTrackInfo {
   tracking?: { providers?: RawProvider[] | null } | null;
 }
 
+interface Rejection {
+  error?: { code?: number; message?: string };
+}
+
 interface ApiResponse {
   code: number;
   message?: string;
-  data?: { accepted?: { track_info?: RawTrackInfo | null }[] | null };
+  data?: {
+    accepted?: { track_info?: RawTrackInfo | null }[] | null;
+    rejected?: Rejection[] | null;
+  };
 }
+
+// Code renvoyé par gettrackinfo pour un numéro qui n'a jamais été enregistré
+const NOT_REGISTERED = -18019902;
 
 /** Erreur liée à la communication avec 17TRACK (renvoyée au client en 502). */
 export class UpstreamError extends Error {}
@@ -78,22 +88,37 @@ async function call(endpoint: 'register' | 'gettrackinfo', apiKey: string, numbe
   return json;
 }
 
-/** Renvoie les infos de suivi, ou null si 17TRACK n'a encore rien pour ce numéro. */
-export async function getTrackInfo(apiKey: string, number: string): Promise<RawTrackInfo | null> {
+export type TrackInfoResult =
+  | { status: 'ready'; info: RawTrackInfo }
+  /** Numéro jamais enregistré : il faut l'enregistrer avant de pouvoir le suivre */
+  | { status: 'unregistered' }
+  /** Numéro enregistré mais sans données de suivi pour l'instant */
+  | { status: 'pending' };
+
+export async function getTrackInfo(apiKey: string, number: string): Promise<TrackInfoResult> {
   const json = await call('gettrackinfo', apiKey, number);
+
   const trackInfo = json.data?.accepted?.[0]?.track_info;
-  return trackInfo?.tracking ? trackInfo : null;
+  if (trackInfo?.tracking) return { status: 'ready', info: trackInfo };
+
+  const rejection = json.data?.rejected?.[0]?.error;
+  if (rejection?.code === NOT_REGISTERED) return { status: 'unregistered' };
+  if (rejection) {
+    console.warn('Numéro rejeté par 17TRACK :', rejection.code, rejection.message);
+    throw new UpstreamError(`17TRACK a refusé ce numéro de suivi (code ${rejection.code}).`);
+  }
+
+  return { status: 'pending' };
 }
 
-/**
- * Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre.
- * Idempotent : un numéro déjà enregistré est simplement rejeté, sans conséquence.
- */
+/** Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre. */
 export async function registerNumber(apiKey: string, number: string): Promise<void> {
-  try {
-    await call('register', apiKey, number);
-  } catch (error) {
-    console.warn('Enregistrement 17TRACK ignoré :', error instanceof Error ? error.message : error);
+  const json = await call('register', apiKey, number);
+
+  const rejection = json.data?.rejected?.[0]?.error;
+  if (rejection) {
+    console.warn('Enregistrement rejeté par 17TRACK :', rejection.code, rejection.message);
+    throw new UpstreamError(`17TRACK a refusé d'enregistrer ce numéro de suivi (code ${rejection.code}).`);
   }
 }
 
