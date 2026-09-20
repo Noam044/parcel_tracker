@@ -17,3 +17,6 @@ npm-debug.log*
 
 # duplicated subfolder
 parcel-tracker/
+
+# typescript
+*.tsbuildinfo

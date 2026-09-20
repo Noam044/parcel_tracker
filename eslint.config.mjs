@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Copie dupliquée du projet (ignorée par git)
+    "parcel-tracker/**",
   ]),
 ]);
 
