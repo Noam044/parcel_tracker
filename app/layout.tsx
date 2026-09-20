@@ -30,12 +30,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // suppressHydrationWarning : le script du <head> ajoute data-theme à <html> avant que React ne s'hydrate
+    // suppressHydrationWarning : le script du thème ajoute data-theme à <html> avant que React ne s'hydrate
     <html lang="fr" className={`${archivo.variable} ${martianMono.variable}`} suppressHydrationWarning>
-      <head>
+      <body className="min-h-dvh">
+        {/*
+          Script du thème : premier enfant du <body>, donc exécuté avant que le contenu ne soit affiché (pas de
+          flash de mauvais thème). Il n'est volontairement PAS dans le <head> : l'edge de Netlify y injecte des
+          <meta> (hosting-provider, netlify-deploy) et React, qui apparie à la main les éléments non « hissables »
+          du <head>, n'y retrouvait plus le script (erreur d'hydratation #418).
+        */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
-      <body className="min-h-dvh">{children}</body>
+        {children}
+      </body>
     </html>
   );
 }
