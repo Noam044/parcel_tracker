@@ -4,3 +4,9 @@
 [build]
   command = "npm run build"
   publish = ".next"
+
+# Adaptateur Next.js de Netlify : il transforme la sortie de « next build » en pages servies par le CDN
+# et en fonction serveur pour /api/track. Netlify devrait l'installer seul, mais ce site ne l'a pas fait
+# (le journal de build n'en mentionnait aucune trace) : on le déclare explicitement, sans figer de version.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
