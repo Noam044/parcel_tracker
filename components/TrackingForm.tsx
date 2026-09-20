@@ -1,56 +1,78 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
 
 interface TrackingFormProps {
-  onSearch: (trackingNumber: string) => void;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (trackingNumber: string) => void;
   isLoading: boolean;
+  /** Version condensée une fois qu'un colis est affiché */
+  compact?: boolean;
 }
 
-export default function TrackingForm({ onSearch, isLoading }: TrackingFormProps) {
-  const [trackingNumber, setTrackingNumber] = useState("");
-
-  const isEmpty = trackingNumber.trim() === "";
+export default function TrackingForm({ value, onChange, onSubmit, isLoading, compact = false }: TrackingFormProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [isMissing, setIsMissing] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Relancer une recherche pendant qu'une autre est en cours remplace simplement la précédente
-    if (!isEmpty) {
-      onSearch(trackingNumber.trim());
+
+    // Le bouton reste toujours actif : un bouton grisé passe pour cassé. Un champ vide reçoit une explication.
+    if (value.trim() === "") {
+      setIsMissing(true);
+      inputRef.current?.focus();
+      return;
     }
+    // Relancer une recherche pendant qu'une autre est en cours remplace simplement la précédente
+    onSubmit(value.trim());
   };
 
   return (
-    // autoComplete="off" empêche Firefox de restaurer l'état (disabled) des champs avant l'hydratation
-    <form onSubmit={handleSubmit} autoComplete="off" className="relative w-full max-w-xl">
-      <div className="relative flex items-center shadow-sm rounded-xl bg-white border border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-slate-400" />
-        </div>
+    <form onSubmit={handleSubmit} autoComplete="off" noValidate className="w-full max-w-[680px]">
+      <label htmlFor="tracking-number" className="label mb-2 block text-ink-soft">
+        Numéro de suivi
+      </label>
+
+      <div className="flex flex-col rounded border-2 border-ink bg-sheet focus-within:outline-3 focus-within:outline-offset-2 focus-within:outline-customs sm:flex-row">
         <input
+          ref={inputRef}
+          id="tracking-number"
           type="text"
-          aria-label="Numéro de suivi"
-          value={trackingNumber}
-          onChange={(e) => setTrackingNumber(e.target.value)}
-          placeholder="Numéro de suivi (ex: AS123456789CN)..."
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsMissing(false);
+          }}
+          placeholder="LP123456785CN"
           spellCheck={false}
-          className="block w-full pl-12 pr-32 py-4 bg-transparent border-none text-slate-900 placeholder-slate-400 focus:outline-none sm:text-base font-medium"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          enterKeyHint="search"
+          aria-invalid={isMissing}
+          aria-describedby={isMissing || !compact ? "tracking-number-hint" : undefined}
+          className="min-w-0 flex-1 bg-transparent px-4 py-4 font-mono text-lg tracking-wide text-ink outline-none placeholder:text-ink-soft/50 sm:text-xl"
         />
-        <div className="absolute inset-y-1.5 right-1.5 flex items-center">
-          <button
-            type="submit"
-            disabled={isEmpty}
-            className="inline-flex items-center justify-center px-6 py-2.5 border border-transparent text-sm font-semibold rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            {isLoading ? (
-              <Loader2 className="animate-spin h-5 w-5" aria-label="Recherche en cours" />
-            ) : (
-              "Suivre"
-            )}
-          </button>
-        </div>
+        <button
+          type="submit"
+          aria-busy={isLoading}
+          className="border-t-2 border-ink bg-customs px-7 py-4 font-wide text-base font-extrabold text-white transition-colors hover:bg-customs-deep focus-visible:outline-offset-[-6px] sm:min-w-[11.5rem] sm:border-l-2 sm:border-t-0"
+        >
+          {isLoading ? "Recherche…" : "Suivre le colis"}
+        </button>
       </div>
+
+      {isMissing ? (
+        <p id="tracking-number-hint" role="alert" className="mt-3 text-[15px] font-semibold text-alert">
+          Saisissez un numéro de suivi, puis cliquez sur « Suivre le colis ».
+        </p>
+      ) : (
+        !compact && (
+          <p id="tracking-number-hint" className="mt-3 text-[15px] text-ink-soft">
+            Tous les transporteurs, sans compte. Le transporteur est reconnu automatiquement.
+          </p>
+        )
+      )}
     </form>
   );
 }

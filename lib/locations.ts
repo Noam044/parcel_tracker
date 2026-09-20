@@ -1,4 +1,4 @@
-import { COUNTRIES } from './countries';
+import { COUNTRIES, countryName } from './countries';
 import type { GeocodeAttempt, GeocodeTarget } from './geocode';
 import type { RawAddress } from './track17';
 
@@ -87,17 +87,6 @@ const LOCODE_GUESS_COUNTRIES = new Set(['CN', 'KR', 'JP', 'FR', 'US', 'DE', 'GB'
 
 const HAN_CHARACTERS = /[\u4e00-\u9fa5]/;
 const HANGUL_CHARACTERS = /[\uAC00-\uD7AF]/;
-
-const regionNames = new Intl.DisplayNames(['fr'], { type: 'region', fallback: 'none' });
-
-/** Nom français d'un code pays ISO (ex: "FR" → "France"), undefined si le code est invalide. */
-function countryName(code: string): string | undefined {
-  try {
-    return /^[A-Z]{2}$/.test(code) ? regionNames.of(code) : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // Mots qui décrivent un site postal plutôt qu'un lieu ("Goyang Mail Center" → "Goyang").
 // Sans les retirer, le géocodeur s'accroche à ces mots (ex: "INTERNATIONAL POST OFFICE" → "Po-dong").

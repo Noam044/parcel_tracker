@@ -1,20 +1,237 @@
 @import "tailwindcss";
 
+/*
+ * Palette tirée des objets du colis : papier d'étiquette, encre d'imprimante thermique,
+ * vert du sticker douane CN22, orange des étiquettes de coursier.
+ */
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --color-paper: #eceee9;
+  --color-sheet: #f8f9f6;
+  --color-ink: #0f1720;
+  --color-ink-soft: #4b5561;
+  --color-rule: #c5cbc2;
+  --color-customs: #00794c;
+  --color-customs-deep: #005f3b;
+  --color-signal: #f0521e;
+  --color-alert: #b3261e;
+
+  --font-sans: var(--font-archivo), "Noto Sans", system-ui, sans-serif;
+  --font-mono: var(--font-martian-mono), ui-monospace, "SFMono-Regular", monospace;
 }
 
 @theme {
-  --animate-fade-in: fade-in 0.4s ease-out;
+  --animate-fade-up: fade-up 0.45s ease-out both;
+  --animate-march: march 0.9s linear infinite;
+  --animate-travel: travel 2.4s ease-in-out infinite alternate;
 
-  @keyframes fade-in {
+  @keyframes fade-up {
     from {
       opacity: 0;
-      transform: translateY(-0.25rem);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
       transform: none;
     }
   }
+
+  /* Le trait pointillé du chargement avance : le colis est en route */
+  @keyframes march {
+    to {
+      background-position: 16px 0;
+    }
+  }
+
+  @keyframes travel {
+    from {
+      left: 0;
+    }
+    to {
+      left: calc(100% - 14px);
+    }
+  }
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    scroll-behavior: smooth;
+    scroll-padding-top: 1.5rem;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-signal);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-customs);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Titres : Archivo étendu, gras */
+@utility font-wide {
+  font-variation-settings: "wdth" 125;
+}
+
+/* Petits libellés d'étiquette */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Fiche façon étiquette d'expédition */
+@utility label-card {
+  position: relative;
+  background: var(--color-sheet);
+  border: 2px solid var(--color-ink);
+  border-radius: 4px;
+}
+
+/*
+ * Ligne de perforation avec ses deux encoches : elle s'étend jusqu'aux bords de la fiche
+ * (compenser le padding de la fiche avec des marges négatives).
+ */
+@utility perforation {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed var(--color-ink);
+  opacity: 1;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: -11px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-paper);
+    border: 2px solid var(--color-ink);
+  }
+  &::before {
+    left: -10px;
+    clip-path: inset(0 0 0 50%);
+  }
+  &::after {
+    right: -10px;
+    clip-path: inset(0 50% 0 0);
+  }
+}
+
+/* Accolade sous un segment du numéro de suivi */
+@utility bracket {
+  position: relative;
+  border-top: 2px solid var(--color-ink);
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: -8px;
+    width: 2px;
+    height: 8px;
+    background: var(--color-ink);
+  }
+  &::before {
+    left: -2px;
+  }
+  &::after {
+    right: -2px;
+  }
+}
+
+/* ---------- Carte ---------- */
+
+.trk-marker {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  background: var(--color-sheet);
+  border: 2.5px solid var(--color-customs);
+  border-radius: 50%;
+}
+
+.trk-marker--latest {
+  width: 20px;
+  height: 20px;
+  background: var(--color-signal);
+  border: 3px solid var(--color-ink);
+}
+
+.trk-marker--latest::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 2px solid var(--color-signal);
+  border-radius: 50%;
+  animation: trk-ping 1.8s ease-out infinite;
+}
+
+.trk-marker--destination {
+  width: 18px;
+  height: 18px;
+  background: var(--color-sheet);
+  border: 3px dashed var(--color-ink);
+}
+
+.trk-marker[data-active="true"] {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+@keyframes trk-ping {
+  from {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.trk-popup .mapboxgl-popup-content {
+  min-width: 190px;
+  padding: 10px 12px;
+  background: var(--color-sheet);
+  color: var(--color-ink);
+  border: 2px solid var(--color-ink);
+  border-radius: 4px;
+  box-shadow: none;
+  font-family: var(--font-sans);
+}
+
+.trk-popup .mapboxgl-popup-tip {
+  display: none;
+}
+
+.mapboxgl-ctrl-group {
+  border: 2px solid var(--color-ink);
+  border-radius: 4px;
+  box-shadow: none;
 }

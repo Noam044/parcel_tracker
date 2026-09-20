@@ -12,10 +12,17 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const PAST_ROUTE = "past-route";
 const FUTURE_ROUTE = "future-route";
 
+// Mêmes valeurs que --color-customs et --color-ink-soft (Mapbox ne lit pas les variables CSS)
+const CUSTOMS_GREEN = "#00794c";
+const REMAINING_GREY = "#4b5561";
+
 interface TrackingMapProps {
   events?: TrackingEvent[];
   destination?: Destination;
   status?: TrackingStatus;
+  /** Index (dans `events`) de l'étape mise en avant */
+  activeIndex?: number | null;
+  onSelectEvent?: (index: number | null) => void;
 }
 
 function createElement(className: string, text?: string): HTMLDivElement {
@@ -26,32 +33,18 @@ function createElement(className: string, text?: string): HTMLDivElement {
 }
 
 // Le contenu des popups vient d'une API externe : il est inséré en texte, jamais en HTML
-function createPopup(title: string, body?: string, footer?: string): mapboxgl.Popup {
-  const content = createElement("p-2 font-sans");
-  content.append(createElement("mb-1 text-[13px] font-bold text-slate-800 last:mb-0", title));
-  if (body) content.append(createElement("mb-1 text-xs text-slate-500 last:mb-0", body));
-  if (footer) content.append(createElement("text-[11px] text-slate-400", footer));
-  return new mapboxgl.Popup({ offset: 25, closeButton: false }).setDOMContent(content);
+function createPopupContent(title: string, body?: string, footer?: string): HTMLDivElement {
+  const content = createElement("");
+  content.append(createElement("mb-1 text-[14px] font-bold leading-snug last:mb-0", title));
+  if (body) content.append(createElement("mb-2 text-[13px] leading-snug text-ink-soft last:mb-0", body));
+  if (footer) content.append(createElement("label text-ink-soft", footer));
+  return content;
 }
 
-function createEventMarker(isLatest: boolean): HTMLDivElement {
-  if (!isLatest) {
-    return createElement("size-3.5 cursor-pointer rounded-full border-[3px] border-white bg-blue-400 shadow");
-  }
-  const marker = createElement("size-6 cursor-pointer");
-  marker.append(
-    createElement("absolute -inset-2 animate-ping rounded-full bg-blue-500 opacity-40"),
-    createElement("relative z-10 size-6 rounded-full border-4 border-white bg-blue-500 shadow-md")
-  );
-  return marker;
-}
-
-function createDestinationMarker(): HTMLDivElement {
-  const marker = createElement("size-5 cursor-pointer rounded-full border-[3px] border-dashed border-slate-400");
-  marker.append(
-    createElement("absolute left-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-400")
-  );
-  return marker;
+function createMarker(kind: "past" | "latest" | "destination"): HTMLDivElement {
+  const el = createElement(`trk-marker${kind === "past" ? "" : ` trk-marker--${kind}`}`);
+  el.dataset.active = "false";
+  return el;
 }
 
 function clearRoutes(map: mapboxgl.Map) {
@@ -86,11 +79,22 @@ function chronologicalPath(events: TrackingEvent[]): Coordinates[] {
   return path;
 }
 
-export default function TrackingMap({ events, destination, status }: TrackingMapProps) {
+export default function TrackingMap({ events, destination, status, activeIndex = null, onSelectEvent }: TrackingMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map());
+  const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const isLoadedRef = useRef(false);
+  const isOpeningPopupRef = useRef(false);
+  const onSelectRef = useRef(onSelectEvent);
+
+  useEffect(() => {
+    onSelectRef.current = onSelectEvent;
+  });
+
+  const isFinished = status === "Delivered" || status === "Returned";
+  const showDestination = !!destination && !isFinished;
 
   // Initialisation de la carte
   useEffect(() => {
@@ -99,70 +103,82 @@ export default function TrackingMap({ events, destination, status }: TrackingMap
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: "mapbox://styles/mapbox/dark-v11",
+      style: "mapbox://styles/mapbox/light-v11",
       center: [2.3522, 48.8566],
       zoom: 3,
     });
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
       isLoadedRef.current = true;
     });
+
+    // Un seul popup, déplacé d'une étape à l'autre. Fermé (clic sur la carte), il désélectionne l'étape.
+    const popup = new mapboxgl.Popup({ closeButton: false, offset: 16, className: "trk-popup", maxWidth: "280px" });
+    popup.on("close", () => {
+      if (!isOpeningPopupRef.current) onSelectRef.current?.(null);
+    });
+
     mapRef.current = map;
+    popupRef.current = popup;
 
     return () => {
       isLoadedRef.current = false;
       mapRef.current = null;
-      markersRef.current = [];
+      popupRef.current = null;
+      markersRef.current = new Map();
+      destinationMarkerRef.current = null;
       map.remove();
     };
   }, []);
 
-  // Mise à jour du tracé et des marqueurs quand les données changent
+  // Tracé et marqueurs, à chaque changement de données
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     const draw = () => {
       markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
+      markersRef.current = new Map();
+      destinationMarkerRef.current?.remove();
+      destinationMarkerRef.current = null;
       clearRoutes(map);
 
       if (!events?.length) return;
 
-      const showDestination = destination && status !== "Delivered" && status !== "Returned";
       const path = chronologicalPath(events);
 
       // Trajet parcouru, puis trajet restant (en ligne droite) jusqu'à la destination
-      if (path.length >= 2) addRoute(map, PAST_ROUTE, path, "#3b82f6", 3, [3, 3]);
+      if (path.length >= 2) addRoute(map, PAST_ROUTE, path, CUSTOMS_GREEN, 3.5, [2, 2]);
       if (showDestination && path.length > 0) {
-        addRoute(map, FUTURE_ROUTE, [path[path.length - 1], destination.coordinates], "#94a3b8", 2.5, [4, 4]);
+        addRoute(map, FUTURE_ROUTE, [path[path.length - 1], destination.coordinates], REMAINING_GREY, 2.5, [1, 2.5]);
       }
 
       // Les événements sont triés du plus récent au plus ancien : le premier avec position est le dernier connu
       let isLatest = true;
-      for (const event of events) {
-        if (!event.coordinates) continue;
-        markersRef.current.push(
-          new mapboxgl.Marker({ element: createEventMarker(isLatest) })
-            .setLngLat(event.coordinates)
-            .setPopup(createPopup(event.location, event.description, formatPopupDate(event.date)))
-            .addTo(map)
-        );
+      events.forEach((event, index) => {
+        if (!event.coordinates) return;
+
+        const element = createMarker(isLatest ? "latest" : "past");
+        element.addEventListener("click", () => onSelectRef.current?.(index));
+        markersRef.current.set(index, new mapboxgl.Marker({ element }).setLngLat(event.coordinates).addTo(map));
         isLatest = false;
-      }
+      });
 
       if (showDestination) {
-        markersRef.current.push(
-          new mapboxgl.Marker({ element: createDestinationMarker() })
-            .setLngLat(destination.coordinates)
-            .setPopup(createPopup("📍 Destination", destination.label))
-            .addTo(map)
-        );
+        destinationMarkerRef.current = new mapboxgl.Marker({ element: createMarker("destination") })
+          .setLngLat(destination.coordinates)
+          .setPopup(
+            new mapboxgl.Popup({ offset: 16, closeButton: false, className: "trk-popup" }).setDOMContent(
+              createPopupContent("Destination", destination.label)
+            )
+          )
+          .addTo(map);
       }
 
       const points = showDestination ? [...path, destination.coordinates] : path;
       if (points.length > 1) {
         const bounds = points.reduce((b, point) => b.extend(point), new mapboxgl.LngLatBounds(points[0], points[0]));
-        map.fitBounds(bounds, { padding: 60, maxZoom: 10 });
+        map.fitBounds(bounds, { padding: 70, maxZoom: 10 });
       } else if (points.length === 1) {
         map.flyTo({ center: points[0], zoom: 8 });
       }
@@ -176,25 +192,75 @@ export default function TrackingMap({ events, destination, status }: TrackingMap
     return () => {
       map.off("load", draw);
     };
-  }, [events, destination, status]);
+  }, [events, destination, showDestination]);
+
+  // Étape sélectionnée : marqueur mis en avant, popup ouvert, carte recentrée
+  useEffect(() => {
+    const map = mapRef.current;
+    const popup = popupRef.current;
+    if (!map || !popup) return;
+
+    markersRef.current.forEach((marker, index) => {
+      marker.getElement().dataset.active = String(index === activeIndex);
+    });
+
+    isOpeningPopupRef.current = true;
+    popup.remove();
+    const event = activeIndex === null ? undefined : events?.[activeIndex];
+    if (event?.coordinates) {
+      popup
+        .setLngLat(event.coordinates)
+        .setDOMContent(createPopupContent(event.location, event.description, formatPopupDate(event.date)))
+        .addTo(map);
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      map.easeTo({
+        center: event.coordinates,
+        zoom: Math.max(map.getZoom(), 8),
+        duration: reduceMotion ? 0 : 800,
+      });
+    }
+    isOpeningPopupRef.current = false;
+  }, [activeIndex, events]);
 
   if (!MAPBOX_TOKEN) {
     return (
-      <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-slate-300">
+      <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-ink-soft">
         La carte est indisponible : la variable NEXT_PUBLIC_MAPBOX_TOKEN n&apos;est pas configurée.
       </div>
     );
   }
 
   // Certains transporteurs ne donnent que le pays : rien à tracer, on l'explique plutôt que d'afficher une carte vide
-  const hasNoPosition = !!events?.length && !events.some((event) => event.coordinates);
+  const hasPosition = !!events?.some((event) => event.coordinates);
+  const hasNoPosition = !!events?.length && !hasPosition;
 
   return (
-    <div className="relative h-full min-h-[500px] w-full">
-      <div ref={containerRef} className="h-full w-full overflow-hidden rounded-2xl" />
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+
+      {hasPosition ? (
+        <ul className="label pointer-events-none absolute left-3 top-3 space-y-1.5 rounded border-2 border-ink bg-sheet px-3 py-2.5">
+          <li className="flex items-center gap-2.5">
+            <span aria-hidden="true" className="w-6 border-t-[3px] border-dashed border-customs" />
+            Trajet parcouru
+          </li>
+          {showDestination && (
+            <li className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="w-6 border-t-[3px] border-dotted border-ink-soft" />
+              Trajet restant
+            </li>
+          )}
+          <li className="flex items-center gap-2.5">
+            <span aria-hidden="true" className="ml-1 size-3.5 rounded-full border-[3px] border-ink bg-signal" />
+            Dernière position
+          </li>
+        </ul>
+      ) : null}
+
       {hasNoPosition && (
-        <p className="absolute left-1/2 top-4 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-xl bg-slate-900/85 px-4 py-3 text-center text-sm text-slate-200 shadow-lg backdrop-blur">
-          Position précise indisponible : le transporteur n&apos;indique pas les lieux de passage de ce colis.
+        <p className="absolute inset-x-3 bottom-8 mx-auto max-w-md rounded border-2 border-ink bg-sheet px-4 py-3 text-center text-[15px]">
+          <span className="label mb-1 block font-bold">Position indisponible</span>
+          Le transporteur n&apos;indique pas les lieux de passage de ce colis.
         </p>
       )}
     </div>

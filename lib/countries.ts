@@ -32,3 +32,14 @@ export const COUNTRIES: Record<string, CountryInfo> = {
   RU: { label: 'Russie', name: 'Russia', fallbackQuery: 'Moscow, Russia' },
   IN: { label: 'Inde', name: 'India', fallbackQuery: 'New Delhi, India' },
 };
+
+const regionNames = new Intl.DisplayNames(['fr'], { type: 'region', fallback: 'none' });
+
+/** Nom français d'un code pays ISO (ex: "FR" → "France"), undefined si le code est invalide. */
+export function countryName(code: string): string | undefined {
+  try {
+    return /^[A-Z]{2}$/.test(code) ? regionNames.of(code) : undefined;
+  } catch {
+    return undefined;
+  }
+}
