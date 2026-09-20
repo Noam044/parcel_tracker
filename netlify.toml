@@ -1,0 +1,6 @@
+# Netlify n'a pas de commande de build par défaut pour ce projet : sans ce fichier, il publie le dépôt
+# tel quel (sans lancer « next build ») et le site répond 404 partout.
+# Les réglages de ce fichier l'emportent sur ceux de l'interface Netlify.
+[build]
+  command = "npm run build"
+  publish = ".next"
