@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     return fail('Numéro de suivi manquant ou invalide.', 400);
   }
 
-  const apiKey = process.env['17TRACK_API_KEY'];
+  const apiKey = process.env.TRACK17_API_KEY;
   if (!apiKey || apiKey === API_KEY_PLACEHOLDER) {
-    return fail("La clé API 17TRACK n'est pas configurée dans .env.local.", 500);
+    return fail("La clé API 17TRACK n'est pas configurée (variable d'environnement TRACK17_API_KEY).", 500);
   }
 
   try {
