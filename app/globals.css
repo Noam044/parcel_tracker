@@ -1,22 +1,54 @@
 @import "tailwindcss";
 
+/* Le mode sombre s'active avec l'attribut data-theme="dark" posé sur <html> (voir lib/theme.ts) */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /*
  * Palette tirée des objets du colis : papier d'étiquette, encre d'imprimante thermique,
  * vert du sticker douane CN22, orange des étiquettes de coursier.
+ *
+ * Ces jetons ne sont PAS « inline » : les classes (bg-paper, text-ink…) lisent la variable CSS,
+ * ce qui permet au mode sombre de les redéfinir plus bas sans toucher aux composants.
  */
-@theme inline {
+@theme {
   --color-paper: #eceee9;
   --color-sheet: #f8f9f6;
   --color-ink: #0f1720;
   --color-ink-soft: #4b5561;
   --color-rule: #c5cbc2;
   --color-customs: #00794c;
-  --color-customs-deep: #005f3b;
+  --color-customs-hover: #005f3b;
+  /* Texte posé sur un aplat vert (bouton) */
+  --color-on-customs: #ffffff;
   --color-signal: #f0521e;
   --color-alert: #b3261e;
+}
 
+/* Polices : elles référencent des variables posées par next/font, donc « inline » */
+@theme inline {
   --font-sans: var(--font-archivo), "Noto Sans", system-ui, sans-serif;
   --font-mono: var(--font-martian-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+/*
+ * Version nuit : la même étiquette imprimée sur du papier sombre. Le vert et le rouge s'éclaircissent
+ * pour garder leur contraste, et le texte du bouton passe en foncé sur le vert clair.
+ */
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #0e1317;
+  --color-sheet: #161d23;
+  --color-ink: #e8ebe6;
+  --color-ink-soft: #97a3ae;
+  --color-rule: #2c3640;
+  --color-customs: #34c88a;
+  --color-customs-hover: #5ad9a2;
+  --color-on-customs: #06150d;
+  --color-alert: #ff7b6e;
 }
 
 @theme {
@@ -67,7 +99,7 @@
 
   ::selection {
     background: var(--color-signal);
-    color: var(--color-ink);
+    color: #0f1720;
   }
 
   :focus-visible {
@@ -231,7 +263,12 @@
 }
 
 .mapboxgl-ctrl-group {
+  background: var(--color-sheet);
   border: 2px solid var(--color-ink);
   border-radius: 4px;
   box-shadow: none;
+}
+
+:root[data-theme="dark"] .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+  filter: invert(1);
 }

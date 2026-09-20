@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Martian_Mono } from "next/font/google";
+import { THEME_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
 // Archivo est une police variable dont l'axe de largeur (wdth) donne toute la personnalité des titres
@@ -29,7 +30,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`${archivo.variable} ${martianMono.variable}`}>
+    // suppressHydrationWarning : le script du <head> ajoute data-theme à <html> avant que React ne s'hydrate
+    <html lang="fr" className={`${archivo.variable} ${martianMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-dvh">{children}</body>
     </html>
   );

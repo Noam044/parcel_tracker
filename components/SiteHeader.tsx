@@ -1,3 +1,5 @@
+import ThemeToggle from "./ThemeToggle";
+
 // Deux points reliés par un pointillé : l'origine et la destination d'un colis
 function RouteMark() {
   return (
@@ -17,14 +19,18 @@ export default function SiteHeader() {
           <RouteMark />
           <span className="font-wide text-[15px] font-extrabold tracking-tight sm:text-[17px]">Parcel Tracker</span>
         </a>
-        <nav aria-label="Aide" className="flex gap-4 text-[13px] font-medium sm:gap-5 sm:text-sm md:gap-8">
-          <a href="#statuts" className="underline-offset-4 hover:underline">
-            Statuts
-          </a>
-          <a href="#bon-a-savoir" className="underline-offset-4 hover:underline">
-            Bon à savoir
-          </a>
-        </nav>
+        <div className="flex items-center gap-4 sm:gap-6 md:gap-8">
+          <nav aria-label="Aide" className="flex gap-4 text-[13px] font-medium sm:gap-5 sm:text-sm md:gap-8">
+            <a href="#statuts" className="underline-offset-4 hover:underline">
+              Statuts
+            </a>
+            {/* Masqué sur petit écran pour laisser la place au curseur : la section suit juste après « Statuts » */}
+            <a href="#bon-a-savoir" className="hidden underline-offset-4 hover:underline sm:inline">
+              Bon à savoir
+            </a>
+          </nav>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

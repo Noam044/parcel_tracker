@@ -4,6 +4,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef } from "react";
 import { formatPopupDate } from "@/lib/format";
+import { useTheme, type Theme } from "@/lib/theme";
 import type { Coordinates, Destination, TrackingEvent, TrackingStatus } from "@/lib/types";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -12,9 +13,12 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const PAST_ROUTE = "past-route";
 const FUTURE_ROUTE = "future-route";
 
-// Mêmes valeurs que --color-customs et --color-ink-soft (Mapbox ne lit pas les variables CSS)
-const CUSTOMS_GREEN = "#00794c";
-const REMAINING_GREY = "#4b5561";
+// Style de fond et couleurs du tracé pour chaque thème. Mapbox ne lit pas les variables CSS : les valeurs
+// reprennent --color-customs et --color-ink-soft de chaque thème (voir globals.css).
+const MAP_THEMES = {
+  light: { style: "mapbox://styles/mapbox/light-v11", route: "#00794c", remaining: "#4b5561" },
+  dark: { style: "mapbox://styles/mapbox/dark-v11", route: "#34c88a", remaining: "#97a3ae" },
+} satisfies Record<Theme, { style: string; route: string; remaining: string }>;
 
 interface TrackingMapProps {
   events?: TrackingEvent[];
@@ -79,6 +83,30 @@ function chronologicalPath(events: TrackingEvent[]): Coordinates[] {
   return path;
 }
 
+/**
+ * Trace le trajet parcouru, puis le trajet restant (en ligne droite) jusqu'à la destination.
+ * `destination` n'est fourni que tant que le colis est en route.
+ */
+function drawRoutes(
+  map: mapboxgl.Map,
+  events: TrackingEvent[] | undefined,
+  destination: Destination | undefined,
+  colors: (typeof MAP_THEMES)[Theme]
+) {
+  try {
+    clearRoutes(map);
+    if (!events?.length) return;
+
+    const path = chronologicalPath(events);
+    if (path.length >= 2) addRoute(map, PAST_ROUTE, path, colors.route, 3.5, [2, 2]);
+    if (destination && path.length > 0) {
+      addRoute(map, FUTURE_ROUTE, [path[path.length - 1], destination.coordinates], colors.remaining, 2.5, [1, 2.5]);
+    }
+  } catch {
+    // Le style est en cours de remplacement : l'événement style.load relancera le tracé
+  }
+}
+
 export default function TrackingMap({ events, destination, status, activeIndex = null, onSelectEvent }: TrackingMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -89,12 +117,19 @@ export default function TrackingMap({ events, destination, status, activeIndex =
   const isOpeningPopupRef = useRef(false);
   const onSelectRef = useRef(onSelectEvent);
 
-  useEffect(() => {
-    onSelectRef.current = onSelectEvent;
-  });
-
   const isFinished = status === "Delivered" || status === "Returned";
   const showDestination = !!destination && !isFinished;
+
+  const { theme } = useTheme();
+  // Thème dont le style est appliqué à la carte (peut retarder sur `theme` le temps d'un changement)
+  const appliedThemeRef = useRef<Theme>(theme);
+  // Dernières données, lues par le rechargement du style pour redessiner le tracé
+  const latestRef = useRef({ events, destination: showDestination ? destination : undefined });
+
+  useEffect(() => {
+    onSelectRef.current = onSelectEvent;
+    latestRef.current = { events, destination: showDestination ? destination : undefined };
+  });
 
   // Initialisation de la carte
   useEffect(() => {
@@ -103,7 +138,7 @@ export default function TrackingMap({ events, destination, status, activeIndex =
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: "mapbox://styles/mapbox/light-v11",
+      style: MAP_THEMES[appliedThemeRef.current].style,
       center: [2.3522, 48.8566],
       zoom: 3,
     });
@@ -141,17 +176,11 @@ export default function TrackingMap({ events, destination, status, activeIndex =
       markersRef.current = new Map();
       destinationMarkerRef.current?.remove();
       destinationMarkerRef.current = null;
-      clearRoutes(map);
+      drawRoutes(map, events, showDestination ? destination : undefined, MAP_THEMES[appliedThemeRef.current]);
 
       if (!events?.length) return;
 
       const path = chronologicalPath(events);
-
-      // Trajet parcouru, puis trajet restant (en ligne droite) jusqu'à la destination
-      if (path.length >= 2) addRoute(map, PAST_ROUTE, path, CUSTOMS_GREEN, 3.5, [2, 2]);
-      if (showDestination && path.length > 0) {
-        addRoute(map, FUTURE_ROUTE, [path[path.length - 1], destination.coordinates], REMAINING_GREY, 2.5, [1, 2.5]);
-      }
 
       // Les événements sont triés du plus récent au plus ancien : le premier avec position est le dernier connu
       let isLatest = true;
@@ -193,6 +222,22 @@ export default function TrackingMap({ events, destination, status, activeIndex =
       map.off("load", draw);
     };
   }, [events, destination, showDestination]);
+
+  // Changement de thème : nouveau fond de carte, sans recréer la carte (le zoom, les marqueurs et le popup restent)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || appliedThemeRef.current === theme) return;
+
+    appliedThemeRef.current = theme;
+    map.setStyle(MAP_THEMES[theme].style);
+
+    // setStyle efface les sources et layers : le tracé est redessiné dès que le nouveau style est chargé
+    const redraw = () => drawRoutes(map, latestRef.current.events, latestRef.current.destination, MAP_THEMES[theme]);
+    map.once("style.load", redraw);
+    return () => {
+      map.off("style.load", redraw);
+    };
+  }, [theme]);
 
   // Étape sélectionnée : marqueur mis en avant, popup ouvert, carte recentrée
   useEffect(() => {

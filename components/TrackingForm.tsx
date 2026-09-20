@@ -56,7 +56,7 @@ export default function TrackingForm({ value, onChange, onSubmit, isLoading, com
         <button
           type="submit"
           aria-busy={isLoading}
-          className="border-t-2 border-ink bg-customs px-7 py-4 font-wide text-base font-extrabold text-white transition-colors hover:bg-customs-deep focus-visible:outline-offset-[-6px] sm:min-w-[11.5rem] sm:border-l-2 sm:border-t-0"
+          className="border-t-2 border-ink bg-customs px-7 py-4 font-wide text-base font-extrabold text-on-customs transition-colors hover:bg-customs-hover focus-visible:outline-offset-[-6px] sm:min-w-[11.5rem] sm:border-l-2 sm:border-t-0"
         >
           {isLoading ? "Recherche…" : "Suivre le colis"}
         </button>
