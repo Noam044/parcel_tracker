@@ -1,4 +1,4 @@
-import { countryName } from "@/lib/countries";
+import { COUNTRIES, countryName } from "@/lib/countries";
 import { parseS10 } from "@/lib/journey";
 
 // La série pèse environ 6,3 fois la taille de police en largeur ; les libellés « Service » et « Origine »
@@ -6,6 +6,20 @@ import { parseS10 } from "@/lib/journey";
 // du bloc (unités cqw) pour que le numéro tienne toujours sur une ligne, dans n'importe quelle colonne.
 const NUMBER_CLASS =
   "font-mono font-medium leading-none tracking-tight text-[min(2.75rem,calc((100cqw_-_9.4rem)/6.3))]";
+
+const SEGMENT_CAPTIONS = ["Service", "Série", "Origine"];
+
+/**
+ * Nom français du pays d'origine.
+ *
+ * On lit d'abord notre table : ses libellés sont identiques partout. Intl.DisplayNames dépend des données de
+ * langue de chaque moteur (Node dit « Chine », Safari sur iPhone dit « Chine continentale »), ce qui donnait
+ * un texte plus long que prévu sur mobile, et un texte différent entre le rendu serveur et le navigateur.
+ * Il ne sert plus que de repli pour les pays absents de la table.
+ */
+function originName(code: string): string | undefined {
+  return COUNTRIES[code]?.label ?? countryName(code);
+}
 
 /**
  * Affiche un numéro de suivi comme sur une étiquette. Un numéro postal international (norme S10)
@@ -18,26 +32,29 @@ export default function ParcelNumber({ number }: { number: string }) {
     return <p className="break-all font-mono text-[clamp(1.5rem,4vw,2.5rem)] font-medium leading-none">{number}</p>;
   }
 
-  const origin = countryName(s10.origin);
-  const segments = [
-    { text: s10.service, caption: "Service", detail: null },
-    { text: s10.serial, caption: "Série", detail: null },
-    { text: s10.origin, caption: "Origine", detail: origin ?? null },
-  ];
+  const origin = originName(s10.origin);
+  const segments = [s10.service, s10.serial, s10.origin];
 
   return (
     <div className="@container">
       <span className="sr-only">{number}</span>
-      <div aria-hidden="true" className="flex gap-4">
-        {segments.map((segment) => (
-          <div key={segment.caption} className="flex flex-col">
-            <span className={NUMBER_CLASS}>{segment.text}</span>
-            <span className="bracket mt-3 pt-1.5">
-              <span className="label block text-ink-soft">{segment.caption}</span>
-              {segment.detail && <span className="label block font-bold text-ink">{segment.detail}</span>}
-            </span>
-          </div>
-        ))}
+      {/* w-fit : la ligne du pays s'aligne sur la fin du numéro, pas sur le bord de la carte */}
+      <div aria-hidden="true" className="w-fit max-w-full">
+        <div className="flex gap-4">
+          {segments.map((text, index) => (
+            <div key={SEGMENT_CAPTIONS[index]} className="flex flex-col">
+              <span className={NUMBER_CLASS}>{text}</span>
+              <span className="bracket mt-3 pt-1.5">
+                <span className="label block text-ink-soft">{SEGMENT_CAPTIONS[index]}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        {/*
+          Le nom du pays a sa propre ligne : la colonne « Origine » ne fait que quelques dizaines de pixels et un
+          nom long (« République démocratique du Congo ») y débordait de la carte. Ici il peut passer à la ligne.
+        */}
+        {origin && <p className="label mt-1 text-right font-bold text-ink">{origin}</p>}
       </div>
     </div>
   );
