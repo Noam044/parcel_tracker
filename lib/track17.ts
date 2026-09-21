@@ -61,16 +61,51 @@ interface ApiResponse {
 // Code renvoyé par gettrackinfo pour un numéro qui n'a jamais été enregistré
 const NOT_REGISTERED = -18019902;
 
+/**
+ * Formats de numéros dont 17TRACK ne détecte PAS seul le transporteur : l'enregistrement est alors rejeté
+ * avec le code -18019903 (« The carrier can not be detected ») alors que le transporteur est bien pris en
+ * charge. On le lui désigne explicitement avec sa clé numérique (liste : res.17track.net/asset/carrier/info/apicarrier.all.json).
+ */
+const CARRIER_HINTS: { pattern: RegExp; carrier: number; name: string }[] = [
+  // Chronopost / Shop2Shop, ex. XW570275354TS : « TS » n'est pas un code pays, 17TRACK ne le reconnaît pas
+  { pattern: /^[A-Z]{2}\d{9}TS$/i, carrier: 100273, name: 'Chronopost' },
+];
+
+export function carrierHint(number: string): number | undefined {
+  return CARRIER_HINTS.find(({ pattern }) => pattern.test(number))?.carrier;
+}
+
+// Ce que 17TRACK répond quand il rejette un numéro, expliqué à un visiteur du site
+const REJECTION_MESSAGES: Record<number, string> = {
+  [-18019903]: "17TRACK ne reconnaît pas le transporteur de ce numéro. Vérifiez qu'il est correct.",
+  [-18019911]: 'Le suivi de ce transporteur est momentanément indisponible chez 17TRACK. Réessayez plus tard.',
+  [-18010012]: "Le format de ce numéro de suivi n'est pas valide.",
+  [-18010018]: 'Ce transporteur exige un code postal que ce site ne demande pas encore.',
+  [-18010019]: 'Ce transporteur exige un code postal que ce site ne demande pas encore.',
+  [-18010020]: 'Ce transporteur exige un numéro de téléphone que ce site ne demande pas encore.',
+};
+
+/** Message affichable pour un rejet 17TRACK ; le code est conservé pour qui doit investiguer. */
+export function describeRejection(code: number | undefined): string {
+  const known = code !== undefined ? REJECTION_MESSAGES[code] : undefined;
+  return `${known ?? '17TRACK a refusé ce numéro de suivi.'} (code ${code})`;
+}
+
 /** Erreur liée à la communication avec 17TRACK (renvoyée au client en 502). */
 export class UpstreamError extends Error {}
 
-async function call(endpoint: 'register' | 'gettrackinfo', apiKey: string, number: string): Promise<ApiResponse> {
+async function call(
+  endpoint: 'register' | 'gettrackinfo',
+  apiKey: string,
+  number: string,
+  carrier?: number
+): Promise<ApiResponse> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/${endpoint}`, {
       method: 'POST',
       headers: { '17token': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ number }]),
+      body: JSON.stringify([carrier ? { number, carrier } : { number }]),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
@@ -105,20 +140,23 @@ export async function getTrackInfo(apiKey: string, number: string): Promise<Trac
   if (rejection?.code === NOT_REGISTERED) return { status: 'unregistered' };
   if (rejection) {
     console.warn('Numéro rejeté par 17TRACK :', rejection.code, rejection.message);
-    throw new UpstreamError(`17TRACK a refusé ce numéro de suivi (code ${rejection.code}).`);
+    throw new UpstreamError(describeRejection(rejection.code));
   }
 
   return { status: 'pending' };
 }
 
-/** Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre. */
+/**
+ * Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre.
+ * Le transporteur est désigné quand on connaît le format du numéro (voir CARRIER_HINTS).
+ */
 export async function registerNumber(apiKey: string, number: string): Promise<void> {
-  const json = await call('register', apiKey, number);
+  const json = await call('register', apiKey, number, carrierHint(number));
 
   const rejection = json.data?.rejected?.[0]?.error;
   if (rejection) {
     console.warn('Enregistrement rejeté par 17TRACK :', rejection.code, rejection.message);
-    throw new UpstreamError(`17TRACK a refusé d'enregistrer ce numéro de suivi (code ${rejection.code}).`);
+    throw new UpstreamError(describeRejection(rejection.code));
   }
 }
 

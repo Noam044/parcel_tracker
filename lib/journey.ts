@@ -1,3 +1,4 @@
+import { countryName } from './countries';
 import { dayKey, formatDay, formatRelative } from './format';
 import type { Coordinates, TrackingData, TrackingEvent } from './types';
 
@@ -10,10 +11,20 @@ export interface S10Number {
   origin: string;
 }
 
-/** Décompose un numéro postal international au format S10 (UPU), null pour tout autre format. */
+/**
+ * Décompose un numéro postal international au format S10 (UPU), null pour tout autre format.
+ * Les deux dernières lettres doivent être un vrai code pays : « XW570275354TS » (Chronopost) a la même forme
+ * mais « TS » n'est pas un pays, ce n'est donc pas un numéro S10.
+ */
 export function parseS10(trackingNumber: string): S10Number | null {
   const match = /^([A-Z]{2})(\d{9})([A-Z]{2})$/i.exec(trackingNumber.trim());
-  return match ? { service: match[1].toUpperCase(), serial: match[2], origin: match[3].toUpperCase() } : null;
+  if (!match) return null;
+
+  const origin = match[3].toUpperCase();
+  // « ZZ » est le code réservé « région inconnue » : Intl le nomme, mais ce n'est pas un pays
+  if (origin === 'ZZ' || !countryName(origin)) return null;
+
+  return { service: match[1].toUpperCase(), serial: match[2], origin };
 }
 
 const EARTH_RADIUS_KM = 6371;

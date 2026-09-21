@@ -1,6 +1,6 @@
 import { COUNTRIES } from './countries';
 import { geocode, targetKey, type GeocodeTarget } from './geocode';
-import { resolveLocation } from './locations';
+import { resolveLocation, splitPlaceAndMessage } from './locations';
 import {
   extractEstimatedDelivery,
   mapStatus,
@@ -75,12 +75,15 @@ export async function buildTrackingData(trackingNumber: string, info: RawTrackIn
     info.shipping_info?.recipient_address?.country,
   ];
 
-  const resolved = mergeEvents(providers).map(({ raw, iso, providerCountry }) => ({
-    iso,
-    description: raw.description,
-    directCoordinates: readCoordinates(raw.address),
-    ...resolveLocation(raw.location, raw.address, { providerCountry, parcelCountries }),
-  }));
+  const resolved = mergeEvents(providers).map(({ raw, iso, providerCountry }) => {
+    const { place, message } = splitPlaceAndMessage(raw.location, raw.description);
+    return {
+      iso,
+      description: message,
+      directCoordinates: readCoordinates(raw.address),
+      ...resolveLocation(place, raw.address, { providerCountry, parcelCountries }),
+    };
+  });
 
   // La destination n'est affichée que tant que le colis est en route
   const isFinished = status === 'Delivered' || status === 'Returned';

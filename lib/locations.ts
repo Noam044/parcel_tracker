@@ -91,12 +91,36 @@ const HANGUL_CHARACTERS = /[\uAC00-\uD7AF]/;
 // Mots qui décrivent un site postal plutôt qu'un lieu ("Goyang Mail Center" → "Goyang").
 // Sans les retirer, le géocodeur s'accroche à ces mots (ex: "INTERNATIONAL POST OFFICE" → "Po-dong").
 const GENERIC_PLACE_WORDS =
-  /\b(international|mail|post|postal|office|center|centre|hub|depot|facility|sorting|distribution|logistics|exchange|inward|outward|terminal|branch|station|warehouse|delivery|processing|customs)\b/gi;
+  /\b(international|mail|post|postal|office|center|centre|hub|depot|facility|sorting|distribution|logistics|exchange|inward|outward|terminal|branch|station|warehouse|delivery|processing|customs|chronopost|web|services?)\b/gi;
 
-/** Nettoie un nom de site en gardant le lieu ; chaîne vide s'il ne reste rien d'exploitable. */
+/**
+ * Nettoie un nom de site en gardant le lieu ; chaîne vide s'il ne reste rien d'exploitable.
+ * Chronopost écrit « NEUFCHATEAU - FR - POINT SAV E.LECLERC » : seule la ville, avant le premier « - », se géocode.
+ */
 function cleanPlaceName(name: string): string {
-  const cleaned = name.replace(GENERIC_PLACE_WORDS, ' ').replace(/\s+/g, ' ').trim();
+  const town = name.split(' - ')[0];
+  const cleaned = town.replace(GENERIC_PLACE_WORDS, ' ').replace(/\s+/g, ' ').trim();
   return cleaned.length > 2 ? cleaned : '';
+}
+
+/**
+ * Certains transporteurs (Chronopost) mettent « LIEU, message » dans le champ lieu et répètent tout dans la
+ * description. On sépare le lieu du message, pour un titre propre et un texte non redondant.
+ */
+export function splitPlaceAndMessage(
+  location: string | null | undefined,
+  description: string | null | undefined
+): { place: string; message: string } {
+  const loc = (location || '').trim();
+  const desc = (description || '').trim();
+
+  const comma = loc.indexOf(',');
+  if (comma > 0 && desc.startsWith(loc)) {
+    const place = loc.slice(0, comma).trim();
+    const message = desc.slice(place.length).replace(/^[\s,]+/, '');
+    return { place, message: message || desc };
+  }
+  return { place: loc, message: desc };
 }
 
 const isCountryCode = (code: string) => /^[A-Z]{2}$/.test(code);
