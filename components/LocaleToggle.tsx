@@ -29,9 +29,14 @@ export default function LocaleToggle() {
         <span aria-hidden="true" className="flex-1 text-center text-ink-soft">
           EN
         </span>
+        {/*
+          left/top-1px, pas 3px : le pavé (22px) doit tenir dans l'espace intérieur de la piste une fois
+          la bordure de 2px déduite (28px de piste - 4px de bordure = 24px, et 1+22+1 = 24 exactement).
+          Avec un décalage de 3px il dépassait de 4px et rendait le texte du pavé décalé vers le bas.
+        */}
         <span
           aria-hidden="true"
-          className="absolute left-[3px] top-[3px] grid h-[22px] w-[22px] place-items-center rounded-[2px] bg-ink text-paper transition-transform duration-200 lang-en:translate-x-[28px]"
+          className="absolute left-[1px] top-[1px] grid h-[22px] w-[22px] place-items-center rounded-[2px] bg-ink text-paper transition-transform duration-200 lang-en:translate-x-[28px]"
         >
           <span className="lang-en:hidden">FR</span>
           <span className="hidden lang-en:block">EN</span>
