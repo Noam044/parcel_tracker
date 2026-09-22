@@ -133,8 +133,10 @@ export interface LocationContext {
 }
 
 export interface ResolvedLocation {
-  /** Texte affiché dans la timeline */
+  /** Texte du transporteur affiché dans la timeline, jamais traduit ; vide si seul le pays est connu ou si rien n'est exploitable */
   displayName: string;
+  /** Quand seul le pays est connu (ex: La Poste renvoie "FR") : composé côté client, dans la langue choisie */
+  countryCode?: string;
   /** Cible à envoyer au géocodeur, null si trop ambigu pour être fiable */
   geocodeTarget: GeocodeTarget | null;
 }
@@ -183,10 +185,12 @@ export function resolveLocation(
     return { displayName: city, geocodeTarget: target };
   }
 
-  // 2. Seul le pays est connu (ex: La Poste renvoie "FR") : rien de précis à placer sur la carte
+  // 2. Seul le pays est connu (ex: La Poste renvoie "FR") : rien de précis à placer sur la carte.
+  // Le nom du pays n'est pas traduit ici : le code brut est renvoyé, composé côté client dans la langue choisie.
   const locUpper = loc.toUpperCase();
-  const onlyCountry = countryName(loc) ?? (loc ? undefined : countryName(country));
-  if (onlyCountry) return { displayName: onlyCountry, geocodeTarget: null };
+  const asCountryCode = (value: string) => (isCountryCode(value) && countryName(value) ? value : undefined);
+  const onlyCountryCode = asCountryCode(loc) ?? (loc ? undefined : asCountryCode(country));
+  if (onlyCountryCode) return { displayName: '', countryCode: onlyCountryCode, geocodeTarget: null };
 
   // 3. UN/LOCODE connu
   if (UNLOCODE_MAP[locUpper]) {
@@ -214,7 +218,7 @@ export function resolveLocation(
 
   // 6. Chaîne trop courte pour être fiable
   if (loc.length <= 3) {
-    return { displayName: loc || 'En transit', geocodeTarget: null };
+    return { displayName: loc, geocodeTarget: null };
   }
 
   // 7. Écritures asiatiques : contexte pays explicite

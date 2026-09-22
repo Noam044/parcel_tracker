@@ -17,13 +17,18 @@ const INTERNATIONAL_DELIVERY_DAYS = 12;
 const DOMESTIC_DELIVERY_DAYS = 5;
 
 interface DestinationPlan {
-  label: string;
+  city?: string;
+  countryCode?: string;
   coordinates?: Coordinates;
   cityTarget?: GeocodeTarget;
   fallbackTarget?: GeocodeTarget;
 }
 
-/** Prépare la résolution de la destination : coordonnées directes, sinon ville, sinon pays. */
+/**
+ * Prépare la résolution de la destination : coordonnées directes, sinon ville, sinon pays.
+ * Ville et pays restent bruts (jamais traduits ici) : c'est le client qui compose le libellé affiché,
+ * dans la langue choisie (voir lib/countries.ts:countryLabel).
+ */
 function planDestination(address: RawAddress | null | undefined): DestinationPlan | null {
   const countryCode = address?.country?.trim() || '';
   const country = COUNTRIES[countryCode];
@@ -33,11 +38,12 @@ function planDestination(address: RawAddress | null | undefined): DestinationPla
   if (!hasCity && !country) return null;
 
   return {
-    label: hasCity ? [city, country?.label ?? countryCode].filter(Boolean).join(', ') : country.label,
+    city: hasCity ? city : undefined,
+    countryCode: countryCode || undefined,
     coordinates: readCoordinates(address),
     cityTarget: hasCity
       ? [
-          ...(COUNTRIES[countryCode] ? [{ query: city, country: countryCode }] : []),
+          ...(country ? [{ query: city, country: countryCode }] : []),
           { query: [city, country?.name ?? countryCode].filter(Boolean).join(', ') },
         ]
       : undefined,
@@ -64,10 +70,17 @@ function estimateDelivery(
   };
 }
 
-/** Transforme la réponse brute de 17TRACK en données prêtes pour l'interface. */
+/**
+ * Transforme la réponse brute de 17TRACK en données prêtes pour l'interface.
+ *
+ * Ces données restent neutres du point de vue de la langue : le texte fourni par le transporteur
+ * (lieux, descriptions) n'est jamais traduit, et nos propres textes de repli (transporteur inconnu,
+ * lieu inconnu) sont laissés vides plutôt que rédigés ici — le client les complète dans la langue
+ * choisie au moment de l'affichage (voir lib/dictionary.ts).
+ */
 export async function buildTrackingData(trackingNumber: string, info: RawTrackInfo): Promise<TrackingData> {
   const providers = info.tracking?.providers ?? [];
-  const carrier = providers[0]?.provider?.name || 'Transporteur détecté automatiquement';
+  const carrier = providers[0]?.provider?.name || '';
   const status = mapStatus(info.latest_status?.status, info.latest_status?.sub_status);
 
   const parcelCountries = [
@@ -104,8 +117,9 @@ export async function buildTrackingData(trackingNumber: string, info: RawTrackIn
 
   const events: TrackingEvent[] = resolved.map((event) => ({
     date: event.iso,
-    location: event.displayName || 'En transit',
-    description: event.description || 'Mise à jour du statut',
+    location: event.displayName,
+    locationCountryCode: event.countryCode,
+    description: event.description,
     coordinates:
       event.directCoordinates ?? (event.geocodeTarget ? geocoded.get(targetKey(event.geocodeTarget)) : null) ?? undefined,
   }));
@@ -125,7 +139,9 @@ export async function buildTrackingData(trackingNumber: string, info: RawTrackIn
       const fallback = await geocode([destinationPlan.fallbackTarget], mapboxToken);
       coordinates = fallback.get(targetKey(destinationPlan.fallbackTarget)) ?? undefined;
     }
-    if (coordinates) destination = { label: destinationPlan.label, coordinates };
+    if (coordinates) {
+      destination = { city: destinationPlan.city, countryCode: destinationPlan.countryCode, coordinates };
+    }
   }
 
   // Seul un colis encore en acheminement a une arrivée estimée

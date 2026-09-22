@@ -1,3 +1,5 @@
+import { DICTIONARY } from './dictionary';
+import type { Locale } from './locale-script';
 import type { Coordinates, TrackingStatus } from './types';
 
 const API_BASE = 'https://api.17track.net/track/v2.2';
@@ -75,20 +77,11 @@ export function carrierHint(number: string): number | undefined {
   return CARRIER_HINTS.find(({ pattern }) => pattern.test(number))?.carrier;
 }
 
-// Ce que 17TRACK répond quand il rejette un numéro, expliqué à un visiteur du site
-const REJECTION_MESSAGES: Record<number, string> = {
-  [-18019903]: "17TRACK ne reconnaît pas le transporteur de ce numéro. Vérifiez qu'il est correct.",
-  [-18019911]: 'Le suivi de ce transporteur est momentanément indisponible chez 17TRACK. Réessayez plus tard.',
-  [-18010012]: "Le format de ce numéro de suivi n'est pas valide.",
-  [-18010018]: 'Ce transporteur exige un code postal que ce site ne demande pas encore.',
-  [-18010019]: 'Ce transporteur exige un code postal que ce site ne demande pas encore.',
-  [-18010020]: 'Ce transporteur exige un numéro de téléphone que ce site ne demande pas encore.',
-};
-
-/** Message affichable pour un rejet 17TRACK ; le code est conservé pour qui doit investiguer. */
-export function describeRejection(code: number | undefined): string {
-  const known = code !== undefined ? REJECTION_MESSAGES[code] : undefined;
-  return `${known ?? '17TRACK a refusé ce numéro de suivi.'} (code ${code})`;
+/** Message affichable pour un rejet 17TRACK, dans la langue demandée ; le code est conservé pour qui doit investiguer. */
+export function describeRejection(code: number | undefined, locale: Locale): string {
+  const errors = DICTIONARY[locale].errors;
+  const known = code !== undefined ? errors.rejection[String(code)] : undefined;
+  return `${known ?? errors.rejectionFallback} (code ${code})`;
 }
 
 /** Erreur liée à la communication avec 17TRACK (renvoyée au client en 502). */
@@ -98,8 +91,10 @@ async function call(
   endpoint: 'register' | 'gettrackinfo',
   apiKey: string,
   number: string,
+  locale: Locale,
   carrier?: number
 ): Promise<ApiResponse> {
+  const errors = DICTIONARY[locale].errors;
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/${endpoint}`, {
@@ -109,16 +104,16 @@ async function call(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
-    throw new UpstreamError('Impossible de joindre 17TRACK, veuillez réessayer.');
+    throw new UpstreamError(errors.networkError);
   }
 
   if (!response.ok) {
-    throw new UpstreamError(`Erreur lors de la communication avec 17TRACK (${response.status})`);
+    throw new UpstreamError(errors.upstreamHttpError(response.status));
   }
 
   const json: ApiResponse = await response.json();
   if (json.code !== 0) {
-    throw new UpstreamError(`Erreur 17TRACK: ${json.message || 'Impossible de récupérer les informations.'}`);
+    throw new UpstreamError(errors.upstreamGenericError(json.message || errors.internalError));
   }
   return json;
 }
@@ -130,8 +125,8 @@ export type TrackInfoResult =
   /** Numéro enregistré mais sans données de suivi pour l'instant */
   | { status: 'pending' };
 
-export async function getTrackInfo(apiKey: string, number: string): Promise<TrackInfoResult> {
-  const json = await call('gettrackinfo', apiKey, number);
+export async function getTrackInfo(apiKey: string, number: string, locale: Locale): Promise<TrackInfoResult> {
+  const json = await call('gettrackinfo', apiKey, number, locale);
 
   const trackInfo = json.data?.accepted?.[0]?.track_info;
   if (trackInfo?.tracking) return { status: 'ready', info: trackInfo };
@@ -140,7 +135,7 @@ export async function getTrackInfo(apiKey: string, number: string): Promise<Trac
   if (rejection?.code === NOT_REGISTERED) return { status: 'unregistered' };
   if (rejection) {
     console.warn('Numéro rejeté par 17TRACK :', rejection.code, rejection.message);
-    throw new UpstreamError(describeRejection(rejection.code));
+    throw new UpstreamError(describeRejection(rejection.code, locale));
   }
 
   return { status: 'pending' };
@@ -150,13 +145,13 @@ export async function getTrackInfo(apiKey: string, number: string): Promise<Trac
  * Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre.
  * Le transporteur est désigné quand on connaît le format du numéro (voir CARRIER_HINTS).
  */
-export async function registerNumber(apiKey: string, number: string): Promise<void> {
-  const json = await call('register', apiKey, number, carrierHint(number));
+export async function registerNumber(apiKey: string, number: string, locale: Locale): Promise<void> {
+  const json = await call('register', apiKey, number, locale, carrierHint(number));
 
   const rejection = json.data?.rejected?.[0]?.error;
   if (rejection) {
     console.warn('Enregistrement rejeté par 17TRACK :', rejection.code, rejection.message);
-    throw new UpstreamError(describeRejection(rejection.code));
+    throw new UpstreamError(describeRejection(rejection.code, locale));
   }
 }
 

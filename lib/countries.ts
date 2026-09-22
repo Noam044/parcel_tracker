@@ -1,7 +1,12 @@
+import type { Locale } from './locale-script';
+
 export interface CountryInfo {
-  /** Nom français, affiché dans l'interface */
+  /** Nom français, affiché dans l'interface en français */
   label: string;
-  /** Nom anglais, utilisé comme contexte de géocodage */
+  /**
+   * Nom anglais. Sert à la fois de contexte de géocodage (« Chine, China ») et de libellé affiché en
+   * anglais : les deux usages coïncident pour tous les pays de cette table.
+   */
   name: string;
   /** Requête de repli pour situer le pays sur la carte */
   fallbackQuery: string;
@@ -33,13 +38,27 @@ export const COUNTRIES: Record<string, CountryInfo> = {
   IN: { label: 'Inde', name: 'India', fallbackQuery: 'New Delhi, India' },
 };
 
-const regionNames = new Intl.DisplayNames(['fr'], { type: 'region', fallback: 'none' });
+const regionNamesByLocale: Record<Locale, Intl.DisplayNames> = {
+  fr: new Intl.DisplayNames(['fr'], { type: 'region', fallback: 'none' }),
+  en: new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }),
+};
 
-/** Nom français d'un code pays ISO (ex: "FR" → "France"), undefined si le code est invalide. */
-export function countryName(code: string): string | undefined {
+/** Nom d'un code pays ISO dans la langue donnée (ex: "FR" → "France" / "France"), undefined si invalide. */
+export function countryName(code: string, locale: Locale = 'fr'): string | undefined {
   try {
-    return /^[A-Z]{2}$/.test(code) ? regionNames.of(code) : undefined;
+    return /^[A-Z]{2}$/.test(code) ? regionNamesByLocale[locale].of(code) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Libellé d'un pays dans la langue donnée : d'abord notre table (identique sur tous les moteurs),
+ * puis Intl.DisplayNames en repli pour les pays absents de la table (voir countryName pour la
+ * réserve : ce repli dépend du navigateur et peut légèrement varier).
+ */
+export function countryLabel(code: string, locale: Locale): string | undefined {
+  const table = COUNTRIES[code];
+  if (table) return locale === 'fr' ? table.label : table.name;
+  return countryName(code, locale);
 }

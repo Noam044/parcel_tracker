@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { eventDescriptionText, eventLocationText } from "@/lib/display";
 import { formatTime } from "@/lib/format";
 import { groupEventsByDay } from "@/lib/journey";
+import { useT } from "@/lib/locale";
 import type { TrackingEvent } from "@/lib/types";
 
 interface TrackingTimelineProps {
@@ -12,7 +14,8 @@ interface TrackingTimelineProps {
 }
 
 export default function TrackingTimeline({ events, activeIndex, onSelect }: TrackingTimelineProps) {
-  const days = groupEventsByDay(events);
+  const { locale, t } = useT();
+  const days = groupEventsByDay(events, locale);
   // Le marqueur orange de la carte est la dernière position connue : même repère ici
   const latestLocatedIndex = events.findIndex((event) => event.coordinates);
 
@@ -29,14 +32,14 @@ export default function TrackingTimeline({ events, activeIndex, onSelect }: Trac
     <section aria-labelledby="timeline-title">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <h2 id="timeline-title" className="font-wide text-xl font-extrabold">
-          Historique
+          {t.timeline.title}
         </h2>
         <p className="label flex items-center gap-4 text-ink-soft">
           <span className="flex items-center gap-2">
-            <span aria-hidden="true" className="size-2.5 bg-customs" /> Sur la carte
+            <span aria-hidden="true" className="size-2.5 bg-customs" /> {t.timeline.legendOnMap}
           </span>
           <span className="flex items-center gap-2">
-            <span aria-hidden="true" className="size-2.5 border-2 border-ink-soft" /> Lieu inconnu
+            <span aria-hidden="true" className="size-2.5 border-2 border-ink-soft" /> {t.timeline.legendUnknown}
           </span>
         </p>
       </div>
@@ -57,8 +60,10 @@ export default function TrackingTimeline({ events, activeIndex, onSelect }: Trac
 
                 const content = (
                   <>
-                    <p className="text-[15px] font-semibold leading-snug">{event.location}</p>
-                    <p className="mt-0.5 break-words text-[15px] leading-snug text-ink-soft">{event.description}</p>
+                    <p className="text-[15px] font-semibold leading-snug">{eventLocationText(event, locale, t)}</p>
+                    <p className="mt-0.5 break-words text-[15px] leading-snug text-ink-soft">
+                      {eventDescriptionText(event, t)}
+                    </p>
                   </>
                 );
 
@@ -69,7 +74,7 @@ export default function TrackingTimeline({ events, activeIndex, onSelect }: Trac
                     className="grid grid-cols-[3.25rem_1fr] gap-x-4"
                   >
                     <time dateTime={event.date} className="pt-[3px] font-mono text-xs font-medium text-ink-soft">
-                      {formatTime(event.date)}
+                      {formatTime(event.date, locale)}
                     </time>
 
                     <div className="relative border-l-2 border-ink pb-1 pl-5">

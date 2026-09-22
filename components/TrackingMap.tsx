@@ -3,7 +3,11 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef } from "react";
+import { destinationLabel, eventDescriptionText, eventLocationText } from "@/lib/display";
 import { formatPopupDate } from "@/lib/format";
+import { useT } from "@/lib/locale";
+import type { Dictionary } from "@/lib/dictionary";
+import type { Locale } from "@/lib/locale-script";
 import { useTheme, type Theme } from "@/lib/theme";
 import type { Coordinates, Destination, TrackingEvent, TrackingStatus } from "@/lib/types";
 
@@ -108,6 +112,7 @@ function drawRoutes(
 }
 
 export default function TrackingMap({ events, destination, status, activeIndex = null, onSelectEvent }: TrackingMapProps) {
+  const { locale, t } = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
@@ -121,6 +126,10 @@ export default function TrackingMap({ events, destination, status, activeIndex =
   const showDestination = !!destination && !isFinished;
 
   const { theme } = useTheme();
+  // Lus dans l'effet d'initialisation de la carte (qui ne s'exécute qu'une fois) via des refs, pour
+  // ne jamais y dépendre : locale/t peuvent changer sans que la carte ait besoin d'être recréée.
+  const localeRef = useRef<Locale>(locale);
+  const tRef = useRef<Dictionary>(t);
   // Thème dont le style est appliqué à la carte (peut retarder sur `theme` le temps d'un changement)
   const appliedThemeRef = useRef<Theme>(theme);
   // Dernières données, lues par le rechargement du style pour redessiner le tracé
@@ -129,6 +138,8 @@ export default function TrackingMap({ events, destination, status, activeIndex =
   useEffect(() => {
     onSelectRef.current = onSelectEvent;
     latestRef.current = { events, destination: showDestination ? destination : undefined };
+    localeRef.current = locale;
+    tRef.current = t;
   });
 
   // Initialisation de la carte
@@ -198,7 +209,7 @@ export default function TrackingMap({ events, destination, status, activeIndex =
           .setLngLat(destination.coordinates)
           .setPopup(
             new mapboxgl.Popup({ offset: 16, closeButton: false, className: "trk-popup" }).setDOMContent(
-              createPopupContent("Destination", destination.label)
+              createPopupContent(tRef.current.map.destinationTitle, destinationLabel(destination, localeRef.current))
             )
           )
           .addTo(map);
@@ -255,7 +266,13 @@ export default function TrackingMap({ events, destination, status, activeIndex =
     if (event?.coordinates) {
       popup
         .setLngLat(event.coordinates)
-        .setDOMContent(createPopupContent(event.location, event.description, formatPopupDate(event.date)))
+        .setDOMContent(
+          createPopupContent(
+            eventLocationText(event, locale, t),
+            eventDescriptionText(event, t),
+            formatPopupDate(event.date, locale)
+          )
+        )
         .addTo(map);
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       map.easeTo({
@@ -265,12 +282,12 @@ export default function TrackingMap({ events, destination, status, activeIndex =
       });
     }
     isOpeningPopupRef.current = false;
-  }, [activeIndex, events]);
+  }, [activeIndex, events, locale, t]);
 
   if (!MAPBOX_TOKEN) {
     return (
       <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-ink-soft">
-        La carte est indisponible : la variable NEXT_PUBLIC_MAPBOX_TOKEN n&apos;est pas configurée.
+        {t.map.tokenMissing}
       </div>
     );
   }
@@ -287,25 +304,25 @@ export default function TrackingMap({ events, destination, status, activeIndex =
         <ul className="label pointer-events-none absolute left-3 top-3 space-y-1.5 rounded border-2 border-ink bg-sheet px-3 py-2.5">
           <li className="flex items-center gap-2.5">
             <span aria-hidden="true" className="w-6 border-t-[3px] border-dashed border-customs" />
-            Trajet parcouru
+            {t.map.legendPast}
           </li>
           {showDestination && (
             <li className="flex items-center gap-2.5">
               <span aria-hidden="true" className="w-6 border-t-[3px] border-dotted border-ink-soft" />
-              Trajet restant
+              {t.map.legendRemaining}
             </li>
           )}
           <li className="flex items-center gap-2.5">
             <span aria-hidden="true" className="ml-1 size-3.5 rounded-full border-[3px] border-ink bg-signal" />
-            Dernière position
+            {t.map.legendLatest}
           </li>
         </ul>
       ) : null}
 
       {hasNoPosition && (
         <p className="absolute inset-x-3 bottom-8 mx-auto max-w-md rounded border-2 border-ink bg-sheet px-4 py-3 text-center text-[15px]">
-          <span className="label mb-1 block font-bold">Position indisponible</span>
-          Le transporteur n&apos;indique pas les lieux de passage de ce colis.
+          <span className="label mb-1 block font-bold">{t.map.noPositionTitle}</span>
+          {t.map.noPositionText}
         </p>
       )}
     </div>

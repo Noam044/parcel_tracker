@@ -5,9 +5,12 @@ import type { TrackingStatus } from './types';
 
 export interface HistoryEntry {
   number: string;
+  /** Vide si non identifié par 17TRACK : le client affiche un texte de repli traduit */
   carrier: string;
   status: TrackingStatus;
+  /** Texte du transporteur, jamais traduit ; vide si seul le pays est connu (voir lastLocationCountryCode) */
   lastLocation: string;
+  lastLocationCountryCode?: string;
   lastDate: string;
 }
 
@@ -18,7 +21,10 @@ const MAX_ENTRIES = 6;
 function isEntry(value: unknown): value is HistoryEntry {
   if (typeof value !== 'object' || value === null) return false;
   const entry = value as Record<string, unknown>;
-  return ['number', 'carrier', 'status', 'lastLocation', 'lastDate'].every((key) => typeof entry[key] === 'string');
+  const hasRequiredStrings = ['number', 'carrier', 'status', 'lastLocation', 'lastDate'].every(
+    (key) => typeof entry[key] === 'string'
+  );
+  return hasRequiredStrings && (entry.lastLocationCountryCode === undefined || typeof entry.lastLocationCountryCode === 'string');
 }
 
 function parse(raw: string): HistoryEntry[] {

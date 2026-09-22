@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/locale";
 import { useTheme } from "@/lib/theme";
 
 // Deux glyphes de 12 px, dessinés au trait comme le logo : le curseur montre le mode actif
@@ -26,6 +27,7 @@ function Moon() {
  */
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const { t } = useT();
   const isDark = theme === "dark";
 
   return (
@@ -33,12 +35,12 @@ export default function ThemeToggle() {
       type="button"
       role="switch"
       aria-checked={isDark}
-      aria-label="Mode sombre"
+      aria-label={t.header.darkMode}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       // py-2.5 agrandit la zone tactile (28 px de curseur → 48 px) sans changer l'apparence
       className="flex items-center gap-2.5 py-2.5"
     >
-      <span className="label hidden text-ink-soft md:inline">Mode sombre</span>
+      <span className="label hidden text-ink-soft md:inline">{t.header.darkMode}</span>
       <span className="relative h-7 w-[3.25rem] shrink-0 rounded border-2 border-ink bg-sheet">
         <span className="absolute left-[3px] top-[3px] grid size-[18px] place-items-center rounded-[2px] bg-ink text-paper transition-transform duration-200 dark:translate-x-6">
           <span className="dark:hidden">

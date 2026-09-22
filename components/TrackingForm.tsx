@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useT } from "@/lib/locale";
 
 interface TrackingFormProps {
   value: string;
@@ -14,6 +15,7 @@ interface TrackingFormProps {
 export default function TrackingForm({ value, onChange, onSubmit, isLoading, compact = false }: TrackingFormProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isMissing, setIsMissing] = useState(false);
+  const { t } = useT();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +33,7 @@ export default function TrackingForm({ value, onChange, onSubmit, isLoading, com
   return (
     <form onSubmit={handleSubmit} autoComplete="off" noValidate className="w-full max-w-[680px]">
       <label htmlFor="tracking-number" className="label mb-2 block text-ink-soft">
-        Numéro de suivi
+        {t.form.numberLabel}
       </label>
 
       <div className="flex flex-col rounded border-2 border-ink bg-sheet focus-within:outline-3 focus-within:outline-offset-2 focus-within:outline-customs sm:flex-row">
@@ -58,18 +60,18 @@ export default function TrackingForm({ value, onChange, onSubmit, isLoading, com
           aria-busy={isLoading}
           className="border-t-2 border-ink bg-customs px-7 py-4 font-wide text-base font-extrabold text-on-customs transition-colors hover:bg-customs-hover focus-visible:outline-offset-[-6px] sm:min-w-[11.5rem] sm:border-l-2 sm:border-t-0"
         >
-          {isLoading ? "Recherche…" : "Suivre le colis"}
+          {isLoading ? t.form.submitLoading : t.form.submitIdle}
         </button>
       </div>
 
       {isMissing ? (
         <p id="tracking-number-hint" role="alert" className="mt-3 text-[15px] font-semibold text-alert">
-          Saisissez un numéro de suivi, puis cliquez sur « Suivre le colis ».
+          {t.form.missingNumber}
         </p>
       ) : (
         !compact && (
           <p id="tracking-number-hint" className="mt-3 text-[15px] text-ink-soft">
-            Tous les transporteurs, sans compte. Le transporteur est reconnu automatiquement.
+            {t.form.hint}
           </p>
         )
       )}

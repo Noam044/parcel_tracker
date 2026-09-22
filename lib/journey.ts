@@ -1,5 +1,6 @@
 import { countryName } from './countries';
 import { dayKey, formatDay, formatRelative } from './format';
+import type { Locale } from './locale-script';
 import type { Coordinates, TrackingData, TrackingEvent } from './types';
 
 export interface S10Number {
@@ -51,7 +52,7 @@ export interface JourneyStats {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Chiffres clés du trajet, calculés à partir des événements. `now` est fourni par l'appelant. */
-export function summarizeJourney(data: TrackingData, now: number): JourneyStats {
+export function summarizeJourney(data: TrackingData, now: number, locale: Locale): JourneyStats {
   const { events, status } = data;
   const newest = events[0]?.date ?? null;
   const oldest = events.at(-1)?.date ?? null;
@@ -78,7 +79,7 @@ export function summarizeJourney(data: TrackingData, now: number): JourneyStats 
     days,
     distanceKm,
     lastScan: newest,
-    lastScanRelative: newest ? formatRelative(newest, now) : '',
+    lastScanRelative: newest ? formatRelative(newest, now, locale) : '',
   };
 }
 
@@ -89,15 +90,15 @@ export interface DayGroup {
 }
 
 /** Regroupe les événements (déjà triés du plus récent au plus ancien) par jour. */
-export function groupEventsByDay(events: TrackingEvent[]): DayGroup[] {
+export function groupEventsByDay(events: TrackingEvent[], locale: Locale): DayGroup[] {
   const groups: DayGroup[] = [];
   events.forEach((event, index) => {
-    const key = dayKey(event.date);
+    const key = dayKey(event.date, locale);
     const last = groups.at(-1);
     if (last?.key === key) {
       last.items.push({ event, index });
     } else {
-      groups.push({ key, label: formatDay(event.date), items: [{ event, index }] });
+      groups.push({ key, label: formatDay(event.date, locale), items: [{ event, index }] });
     }
   });
   return groups;

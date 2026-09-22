@@ -1,16 +1,22 @@
+"use client";
+
+import { useT } from "@/lib/locale";
+
 interface BannerProps {
   tone: "error" | "notice";
   children: React.ReactNode;
 }
 
-const TONES = {
-  error: { tag: "Erreur", border: "border-l-alert", text: "text-alert", role: "alert" as const },
-  notice: { tag: "Introuvable", border: "border-l-signal", text: "text-ink", role: "status" as const },
+const TONE_STYLES = {
+  error: { border: "border-l-alert", text: "text-alert", role: "alert" as const },
+  notice: { border: "border-l-signal", text: "text-ink", role: "status" as const },
 };
 
 /** Message court sous le formulaire : une étiquette qualifie le message, la couleur de la marge le confirme. */
 export default function Banner({ tone, children }: BannerProps) {
-  const { tag, border, text, role } = TONES[tone];
+  const { border, text, role } = TONE_STYLES[tone];
+  const { t } = useT();
+  const tag = tone === "error" ? t.banner.errorTag : t.banner.noticeTag;
 
   return (
     <div

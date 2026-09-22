@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Martian_Mono } from "next/font/google";
+import { LOCALE_SCRIPT } from "@/lib/locale-script";
 import { THEME_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
@@ -30,16 +31,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // suppressHydrationWarning : le script du thème ajoute data-theme à <html> avant que React ne s'hydrate
+    // suppressHydrationWarning : les scripts du <body> changent lang, data-theme et data-lang sur
+    // <html> avant que React ne s'hydrate (voir plus bas)
     <html lang="fr" className={`${archivo.variable} ${martianMono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh">
         {/*
-          Script du thème : premier enfant du <body>, donc exécuté avant que le contenu ne soit affiché (pas de
-          flash de mauvais thème). Il n'est volontairement PAS dans le <head> : l'edge de Netlify y injecte des
-          <meta> (hosting-provider, netlify-deploy) et React, qui apparie à la main les éléments non « hissables »
-          du <head>, n'y retrouvait plus le script (erreur d'hydratation #418).
+          Scripts du thème et de la langue : premiers enfants du <body>, donc exécutés avant que le
+          contenu ne soit affiché (pas de flash de mauvais thème ni de mauvaise langue). Volontairement
+          PAS dans le <head> : l'edge de Netlify y injecte des <meta> (hosting-provider, netlify-deploy)
+          et React, qui apparie à la main les éléments non « hissables » du <head>, n'y retrouvait plus
+          le script (erreur d'hydratation #418).
         */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: LOCALE_SCRIPT }} />
         {children}
       </body>
     </html>

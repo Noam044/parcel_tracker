@@ -1,3 +1,5 @@
+import { DICTIONARY } from './dictionary';
+import type { Locale } from './locale-script';
 import type { ApiError, ApiPending, TrackingData } from './types';
 
 // Un numéro tout juste enregistré peut mettre un moment à recevoir ses premières données
@@ -17,11 +19,14 @@ function isTrackingData(payload: unknown): payload is TrackingData {
 }
 
 /** Une seule requête : les données de suivi, ou null si le colis n'a pas encore de données. */
-async function requestTracking(trackingNumber: string, signal?: AbortSignal): Promise<TrackingData | null> {
+async function requestTracking(trackingNumber: string, locale: Locale, signal?: AbortSignal): Promise<TrackingData | null> {
+  const errors = DICTIONARY[locale].errors;
   const response = await fetch('/api/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trackingNumber }),
+    // La langue voyage avec la requête : la route API l'utilise pour ses propres messages d'erreur
+    // (numéro invalide, rejet 17TRACK…). Les données de suivi elles-mêmes restent neutres (voir lib/tracking.ts).
+    body: JSON.stringify({ trackingNumber, locale }),
     signal,
   });
 
@@ -29,9 +34,9 @@ async function requestTracking(trackingNumber: string, signal?: AbortSignal): Pr
   const payload: unknown = await response.json().catch(() => null);
 
   if (isApiError(payload)) throw new Error(payload.error);
-  if (!response.ok) throw new Error(`Erreur ${response.status}`);
+  if (!response.ok) throw new Error(errors.httpErrorGeneric(response.status));
   if (isPending(payload)) return null;
-  if (!isTrackingData(payload)) throw new Error('Réponse inattendue du serveur.');
+  if (!isTrackingData(payload)) throw new Error(errors.unexpectedResponse);
 
   return payload;
 }
@@ -65,10 +70,11 @@ interface TrackOptions {
  */
 export async function trackParcel(
   trackingNumber: string,
+  locale: Locale,
   { signal, onPending, pollIntervalMs = POLL_INTERVAL_MS, maxPolls = MAX_POLLS }: TrackOptions = {}
 ): Promise<TrackingData | null> {
   for (let poll = 0; poll <= maxPolls; poll++) {
-    const data = await requestTracking(trackingNumber, signal);
+    const data = await requestTracking(trackingNumber, locale, signal);
     if (data) return data;
 
     if (poll < maxPolls) {

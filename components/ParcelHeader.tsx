@@ -1,19 +1,29 @@
+"use client";
+
+import { carrierText } from "@/lib/display";
 import { formatDistance, formatDuration, formatEventDate, formatLongDate } from "@/lib/format";
 import type { JourneyStats } from "@/lib/journey";
-import { progressSteps, STATUS_META } from "@/lib/status";
+import { useT } from "@/lib/locale";
+import { progressStepIndex, STATUS_CLASSES } from "@/lib/status";
+import type { Dictionary } from "@/lib/dictionary";
 import type { TrackingData } from "@/lib/types";
 import ParcelNumber from "./ParcelNumber";
 
 /** Trois étapes : la barre indique où en est le colis, et dévie de couleur en cas de retour ou d'incident. */
-function Progress({ status }: { status: TrackingData["status"] }) {
-  const { labels, active } = progressSteps(status);
+function Progress({ status, t }: { status: TrackingData["status"]; t: Dictionary }) {
+  const active = progressStepIndex(status);
+  const labels: [string, string, string] = [
+    t.progressSteps.registered,
+    status === "Exception" ? t.progressSteps.exception : t.progressSteps.inTransit,
+    status === "Returned" ? t.progressSteps.returned : t.progressSteps.delivered,
+  ];
 
   return (
-    <ol aria-label="Progression du colis" className="mt-8 grid grid-cols-3 gap-2">
+    <ol aria-label={t.parcelHeader.progressAria} className="mt-8 grid grid-cols-3 gap-2">
       {labels.map((label, index) => (
         <li key={label} aria-current={index === active ? "step" : undefined}>
           <div
-            className={`h-[6px] ${index < active ? "bg-ink" : index === active ? STATUS_META[status].segment : "bg-rule"}`}
+            className={`h-[6px] ${index < active ? "bg-ink" : index === active ? STATUS_CLASSES[status].segment : "bg-rule"}`}
           />
           <p className={`label mt-2 ${index === active ? "font-bold text-ink" : "text-ink-soft"}`}>{label}</p>
         </li>
@@ -34,52 +44,65 @@ function Stat({ label, value, detail }: { label: string; value: string; detail?:
 
 /** L'étiquette du colis : numéro, statut et progression, puis les chiffres clés du trajet. */
 export default function ParcelHeader({ data, stats }: { data: TrackingData; stats: JourneyStats }) {
-  const meta = STATUS_META[data.status];
-  const estimate = data.estimatedDelivery ? formatLongDate(data.estimatedDelivery) : "";
+  const { locale, t } = useT();
+  const meta = t.status[data.status];
+  const estimate = data.estimatedDelivery ? formatLongDate(data.estimatedDelivery, locale) : "";
 
   return (
-    <section aria-label="Résumé du colis" className="label-card animate-fade-up p-6 md:p-8">
+    <section aria-label={t.parcelHeader.summaryAria} className="label-card animate-fade-up p-6 md:p-8">
       <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1">
-          <p className="label mb-4 text-ink-soft">Numéro de suivi</p>
+          <p className="label mb-4 text-ink-soft">{t.form.numberLabel}</p>
           <ParcelNumber number={data.trackingNumber} />
         </div>
 
         <div className="md:text-right">
-          <p className="label mb-3 text-ink-soft">Statut</p>
+          <p className="label mb-3 text-ink-soft">{t.parcelHeader.statusLabel}</p>
           <p
-            className={`font-wide inline-block border-[3px] px-4 py-2 text-[clamp(1.125rem,2.2vw,1.5rem)] font-extrabold uppercase leading-none ${meta.stamp}`}
+            className={`font-wide inline-block border-[3px] px-4 py-2 text-[clamp(1.125rem,2.2vw,1.5rem)] font-extrabold uppercase leading-none ${STATUS_CLASSES[data.status].stamp}`}
           >
             {meta.label}
           </p>
-          <p className="mt-3 max-w-[28ch] text-sm text-ink-soft md:ml-auto">{data.carrier}</p>
+          <p className="mt-3 max-w-[28ch] text-sm text-ink-soft md:ml-auto">{carrierText(data.carrier, t)}</p>
         </div>
       </div>
 
-      <Progress status={data.status} />
+      <Progress status={data.status} t={t} />
 
       <div className="perforation -mx-6 mb-7 mt-8 md:-mx-8" />
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-6 lg:grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))]">
-        <Stat label="Étapes" value={String(stats.steps)} detail="événements enregistrés" />
+        <Stat label={t.parcelHeader.steps} value={String(stats.steps)} detail={t.parcelHeader.stepsDetail} />
         {stats.days !== null && (
           <Stat
-            label="Durée du trajet"
-            value={formatDuration(stats.days)}
-            detail={data.status === "Delivered" || data.status === "Returned" ? "du premier au dernier scan" : "depuis le premier scan"}
+            label={t.parcelHeader.duration}
+            value={formatDuration(stats.days, locale)}
+            detail={
+              data.status === "Delivered" || data.status === "Returned"
+                ? t.parcelHeader.durationDetailFinished
+                : t.parcelHeader.durationDetailOngoing
+            }
           />
         )}
         {stats.distanceKm !== null && (
-          <Stat label="Distance" value={`≈ ${formatDistance(stats.distanceKm)}`} detail="à vol d'oiseau" />
+          <Stat
+            label={t.parcelHeader.distance}
+            value={`≈ ${formatDistance(stats.distanceKm, locale)}`}
+            detail={t.parcelHeader.distanceDetail}
+          />
         )}
         {stats.lastScan && (
-          <Stat label="Dernier scan" value={formatEventDate(stats.lastScan)} detail={stats.lastScanRelative} />
+          <Stat
+            label={t.parcelHeader.lastScan}
+            value={formatEventDate(stats.lastScan, locale)}
+            detail={stats.lastScanRelative}
+          />
         )}
         {estimate && (
           <Stat
-            label="Arrivée estimée"
+            label={t.parcelHeader.eta}
             value={estimate}
-            detail={data.estimatedDeliveryApproximate ? "estimation indicative" : "selon le transporteur"}
+            detail={data.estimatedDeliveryApproximate ? t.parcelHeader.etaDetailApprox : t.parcelHeader.etaDetailCarrier}
           />
         )}
       </dl>

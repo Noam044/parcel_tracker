@@ -5,18 +5,25 @@ export type TrackingStatus = 'In Transit' | 'Delivered' | 'Returned' | 'Pending'
 
 export interface TrackingEvent {
   date: string;
+  /** Texte du transporteur, jamais traduit ; vide si aucun texte exploitable (voir locationCountryCode) */
   location: string;
+  /** Quand seul le pays est connu (ex: La Poste renvoie "FR") : composé côté client, dans la langue choisie */
+  locationCountryCode?: string;
   description: string;
   coordinates?: Coordinates;
 }
 
 export interface Destination {
-  label: string;
+  /** Ville, quand connue */
+  city?: string;
+  /** Code ISO du pays ; composé côté client avec la ville en un libellé complet */
+  countryCode?: string;
   coordinates: Coordinates;
 }
 
 export interface TrackingData {
   trackingNumber: string;
+  /** Nom du transporteur ; vide si non identifié (le client affiche un texte de repli traduit) */
   carrier: string;
   status: TrackingStatus;
   estimatedDelivery?: string;
