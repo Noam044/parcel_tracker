@@ -117,7 +117,11 @@ export interface Dictionary {
     internalError: string;
     networkError: string;
     upstreamHttpError: (status: number) => string;
-    upstreamGenericError: (message: string) => string;
+    upstreamGenericError: string;
+    busy: string;
+    tooManyRequests: string;
+    registrationsPaused: string;
+    forbidden: string;
     unexpectedResponse: string;
     httpErrorGeneric: (status: number) => string;
     searchGenericError: string;
@@ -269,11 +273,16 @@ const fr: Dictionary = {
   autoDetectedCarrier: 'Transporteur détecté automatiquement',
   errors: {
     invalidNumber: 'Numéro de suivi manquant ou invalide.',
-    keyNotConfigured: "La clé API 17TRACK n'est pas configurée (variable d'environnement TRACK17_API_KEY).",
+    keyNotConfigured: "Le service de suivi n'est pas configuré.",
     internalError: 'Une erreur interne est survenue.',
     networkError: 'Impossible de joindre 17TRACK, veuillez réessayer.',
     upstreamHttpError: (status) => `Erreur lors de la communication avec 17TRACK (${status})`,
-    upstreamGenericError: (message) => `Erreur 17TRACK: ${message}`,
+    upstreamGenericError: '17TRACK a renvoyé une erreur, veuillez réessayer plus tard.',
+    busy: '17TRACK reçoit trop de demandes en ce moment. Réessayez dans quelques secondes.',
+    tooManyRequests: 'Trop de recherches depuis votre connexion. Patientez un peu avant de réessayer.',
+    registrationsPaused:
+      "Le suivi de nouveaux numéros est en pause pour aujourd'hui. Les colis déjà suivis restent consultables : réessayez demain.",
+    forbidden: 'Requête refusée.',
     unexpectedResponse: 'Réponse inattendue du serveur.',
     httpErrorGeneric: (status) => `Erreur ${status}`,
     searchGenericError: 'Une erreur est survenue',
@@ -430,11 +439,16 @@ const en: Dictionary = {
   autoDetectedCarrier: 'Automatically detected carrier',
   errors: {
     invalidNumber: 'Tracking number missing or invalid.',
-    keyNotConfigured: 'The 17TRACK API key is not configured (TRACK17_API_KEY environment variable).',
+    keyNotConfigured: 'The tracking service is not configured.',
     internalError: 'An internal error occurred.',
     networkError: 'Could not reach 17TRACK, please try again.',
     upstreamHttpError: (status) => `Error communicating with 17TRACK (${status})`,
-    upstreamGenericError: (message) => `17TRACK error: ${message}`,
+    upstreamGenericError: '17TRACK returned an error, please try again later.',
+    busy: '17TRACK is receiving too many requests right now. Try again in a few seconds.',
+    tooManyRequests: 'Too many searches from your connection. Please wait a little before trying again.',
+    registrationsPaused:
+      'Tracking new numbers is paused for today. Parcels already tracked can still be looked up: try again tomorrow.',
+    forbidden: 'Request refused.',
     unexpectedResponse: 'Unexpected response from the server.',
     httpErrorGeneric: (status) => `Error ${status}`,
     searchGenericError: 'Something went wrong',

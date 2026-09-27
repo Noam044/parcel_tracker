@@ -103,7 +103,9 @@ export async function buildTrackingData(trackingNumber: string, info: RawTrackIn
   const destinationPlan = isFinished ? null : planDestination(info.shipping_info?.recipient_address);
 
   // Tous les appels de géocodage nécessaires partent en parallèle
-  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  // Token secret dédié au géocodage s'il existe : le token public, visible par tous dans le navigateur,
+  // peut alors être restreint aux URL du site dans le tableau de bord Mapbox (voir README)
+  const mapboxToken = process.env.MAPBOX_GEOCODING_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   const targets: GeocodeTarget[] = [];
   if (mapboxToken) {
     for (const event of resolved) {

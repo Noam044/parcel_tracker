@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react';
+import { STATUS_CLASSES } from './status';
 import type { TrackingStatus } from './types';
 
 // Historique des derniers colis, conservé uniquement dans le navigateur
@@ -24,7 +25,12 @@ function isEntry(value: unknown): value is HistoryEntry {
   const hasRequiredStrings = ['number', 'carrier', 'status', 'lastLocation', 'lastDate'].every(
     (key) => typeof entry[key] === 'string'
   );
-  return hasRequiredStrings && (entry.lastLocationCountryCode === undefined || typeof entry.lastLocationCountryCode === 'string');
+  return (
+    hasRequiredStrings &&
+    // Un statut inconnu (données corrompues ou d'une ancienne version) ferait planter l'affichage
+    Object.hasOwn(STATUS_CLASSES, entry.status as string) &&
+    (entry.lastLocationCountryCode === undefined || typeof entry.lastLocationCountryCode === 'string')
+  );
 }
 
 function parse(raw: string): HistoryEntry[] {

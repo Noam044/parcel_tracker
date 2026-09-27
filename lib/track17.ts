@@ -52,8 +52,6 @@ interface Rejection {
 }
 
 interface ApiResponse {
-  code: number;
-  message?: string;
   data?: {
     accepted?: { track_info?: RawTrackInfo | null }[] | null;
     rejected?: Rejection[] | null;
@@ -62,6 +60,10 @@ interface ApiResponse {
 
 // Code renvoyé par gettrackinfo pour un numéro qui n'a jamais été enregistré
 const NOT_REGISTERED = -18019902;
+// Code renvoyé par register quand le numéro l'est déjà (ex: deux onglets qui cherchent le même colis)
+const ALREADY_REGISTERED = -18019901;
+// Plafond quotidien du compte (réglage max_track_daily) ou quota total épuisé
+const OUT_OF_QUOTA = new Set([-18019907, -18019908]);
 
 /**
  * Formats de numéros dont 17TRACK ne détecte PAS seul le transporteur : l'enregistrement est alors rejeté
@@ -84,39 +86,58 @@ export function describeRejection(code: number | undefined, locale: Locale): str
   return `${known ?? errors.rejectionFallback} (code ${code})`;
 }
 
-/** Erreur liée à la communication avec 17TRACK (renvoyée au client en 502). */
-export class UpstreamError extends Error {}
+/** Erreur liée à la communication avec 17TRACK (renvoyée au client en 502, ou 503 si `status` le précise). */
+export class UpstreamError extends Error {
+  constructor(
+    message: string,
+    readonly status = 502
+  ) {
+    super(message);
+  }
+}
 
-async function call(
-  endpoint: 'register' | 'gettrackinfo',
+/** Appel brut à 17TRACK. Les détails techniques restent dans les logs serveur, jamais dans la réponse au client. */
+export async function post<T>(
+  endpoint: 'register' | 'gettrackinfo' | 'getquota',
   apiKey: string,
-  number: string,
-  locale: Locale,
-  carrier?: number
-): Promise<ApiResponse> {
+  body: unknown,
+  locale: Locale
+): Promise<T & { code: number; message?: string }> {
   const errors = DICTIONARY[locale].errors;
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/${endpoint}`, {
       method: 'POST',
       headers: { '17token': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify([carrier ? { number, carrier } : { number }]),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-  } catch {
+  } catch (error) {
+    console.error(`17TRACK ${endpoint} injoignable :`, error);
     throw new UpstreamError(errors.networkError);
   }
 
+  // 17TRACK limite chaque compte à 3 requêtes par seconde
+  if (response.status === 429) {
+    console.warn(`17TRACK ${endpoint} : limite de débit atteinte (429)`);
+    throw new UpstreamError(errors.busy, 503);
+  }
   if (!response.ok) {
+    console.error(`17TRACK ${endpoint} : HTTP ${response.status}`);
     throw new UpstreamError(errors.upstreamHttpError(response.status));
   }
 
-  const json: ApiResponse = await response.json();
-  if (json.code !== 0) {
-    throw new UpstreamError(errors.upstreamGenericError(json.message || errors.internalError));
+  const json = (await response.json().catch(() => null)) as (T & { code: number; message?: string }) | null;
+  if (!json || json.code !== 0) {
+    // Ex: clé invalide ou compte suspendu. Le message de 17TRACK peut décrire le compte : il n'est pas relayé.
+    console.error(`17TRACK ${endpoint} : code ${json?.code}`, json?.message);
+    throw new UpstreamError(errors.upstreamGenericError);
   }
   return json;
 }
+
+const call = (endpoint: 'register' | 'gettrackinfo', apiKey: string, number: string, locale: Locale, carrier?: number) =>
+  post<ApiResponse>(endpoint, apiKey, [carrier ? { number, carrier } : { number }], locale);
 
 export type TrackInfoResult =
   | { status: 'ready'; info: RawTrackInfo }
@@ -149,10 +170,13 @@ export async function registerNumber(apiKey: string, number: string, locale: Loc
   const json = await call('register', apiKey, number, locale, carrierHint(number));
 
   const rejection = json.data?.rejected?.[0]?.error;
-  if (rejection) {
-    console.warn('Enregistrement rejeté par 17TRACK :', rejection.code, rejection.message);
-    throw new UpstreamError(describeRejection(rejection.code, locale));
+  if (!rejection || rejection.code === ALREADY_REGISTERED) return;
+
+  console.warn('Enregistrement rejeté par 17TRACK :', rejection.code, rejection.message);
+  if (rejection.code !== undefined && OUT_OF_QUOTA.has(rejection.code)) {
+    throw new UpstreamError(DICTIONARY[locale].errors.registrationsPaused, 503);
   }
+  throw new UpstreamError(describeRejection(rejection.code, locale));
 }
 
 export function mapStatus(raw: string | null | undefined, subStatus?: string | null): TrackingStatus {
