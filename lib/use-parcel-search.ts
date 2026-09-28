@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { trackParcel } from './api';
+import { trackParcel, TrackingError } from './api';
 import { rememberParcel } from './history';
 import { summarizeJourney, type JourneyStats } from './journey';
 import { useT } from './locale';
@@ -14,6 +14,8 @@ interface SearchState {
   isWaiting: boolean;
   error: string | null;
   notice: string | null;
+  /** Limite quotidienne de nouveaux numéros atteinte : ce n'est pas une panne, l'affichage le distingue */
+  limit: string | null;
 }
 
 const INITIAL_STATE: SearchState = {
@@ -23,6 +25,7 @@ const INITIAL_STATE: SearchState = {
   isWaiting: false,
   error: null,
   notice: null,
+  limit: null,
 };
 
 export function useParcelSearch() {
@@ -62,6 +65,10 @@ export function useParcelSearch() {
       setState({ ...INITIAL_STATE, data, fetchedAt: Date.now() });
     } catch (err) {
       if (controller.signal.aborted) return;
+      if (err instanceof TrackingError && err.code === 'registrations_paused') {
+        setState({ ...INITIAL_STATE, limit: err.message });
+        return;
+      }
       setState({ ...INITIAL_STATE, error: err instanceof Error ? err.message : t.errors.searchGenericError });
     }
   };

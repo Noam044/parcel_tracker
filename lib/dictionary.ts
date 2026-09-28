@@ -42,6 +42,7 @@ export interface Dictionary {
   banner: {
     errorTag: string;
     noticeTag: string;
+    limitTag: string;
   };
   progress: {
     newNumberEyebrow: string;
@@ -163,6 +164,7 @@ const fr: Dictionary = {
   banner: {
     errorTag: 'Erreur',
     noticeTag: 'Introuvable',
+    limitTag: 'Limite du jour atteinte',
   },
   progress: {
     newNumberEyebrow: 'Nouveau numéro',
@@ -330,6 +332,7 @@ const en: Dictionary = {
   banner: {
     errorTag: 'Error',
     noticeTag: 'Not found',
+    limitTag: 'Daily limit reached',
   },
   progress: {
     newNumberEyebrow: 'New number',

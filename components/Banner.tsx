@@ -3,20 +3,21 @@
 import { useT } from "@/lib/locale";
 
 interface BannerProps {
-  tone: "error" | "notice";
+  tone: "error" | "notice" | "limit";
   children: React.ReactNode;
 }
 
 const TONE_STYLES = {
   error: { border: "border-l-alert", text: "text-alert", role: "alert" as const },
   notice: { border: "border-l-signal", text: "text-ink", role: "status" as const },
+  limit: { border: "border-l-signal", text: "text-ink", role: "status" as const },
 };
 
 /** Message court sous le formulaire : une étiquette qualifie le message, la couleur de la marge le confirme. */
 export default function Banner({ tone, children }: BannerProps) {
   const { border, text, role } = TONE_STYLES[tone];
   const { t } = useT();
-  const tag = tone === "error" ? t.banner.errorTag : t.banner.noticeTag;
+  const tag = { error: t.banner.errorTag, notice: t.banner.noticeTag, limit: t.banner.limitTag }[tone];
 
   return (
     <div

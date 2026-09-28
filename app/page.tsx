@@ -14,12 +14,21 @@ import { useT } from "@/lib/locale";
 import { useParcelSearch } from "@/lib/use-parcel-search";
 
 export default function Home() {
-  const { data, stats, isLoading, isWaiting, error, notice, search } = useParcelSearch();
+  const { data, stats, isLoading, isWaiting, error, notice, limit, search } = useParcelSearch();
   const [query, setQuery] = useState("");
   const { t } = useT();
 
   // Une fois un colis affiché (ou en cours de recherche), le formulaire cède la place aux résultats
   const isCompact = isLoading || !!data;
+
+  // Juste sous le formulaire : sur téléphone, la colonne d'exemple passe dessous et masquerait le message
+  const banners = (
+    <>
+      {error && <Banner tone="error">{error}</Banner>}
+      {notice && <Banner tone="notice">{notice}</Banner>}
+      {limit && <Banner tone="limit">{limit}</Banner>}
+    </>
+  );
 
   const handleSearch = (trackingNumber: string) => {
     setQuery(trackingNumber);
@@ -36,6 +45,7 @@ export default function Home() {
             <>
               <h1 className="sr-only">Parcel Tracker</h1>
               <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} compact />
+              {banners}
             </>
           ) : (
             <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16">
@@ -47,14 +57,12 @@ export default function Home() {
                 <p className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-soft">{t.hero.subtitle}</p>
                 <div className="mt-10">
                   <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} />
+                  {banners}
                 </div>
               </div>
               <Specimen />
             </div>
           )}
-
-          {error && <Banner tone="error">{error}</Banner>}
-          {notice && <Banner tone="notice">{notice}</Banner>}
         </section>
 
         {!isCompact && <RecentParcels onSelect={handleSearch} />}

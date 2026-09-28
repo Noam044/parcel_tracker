@@ -36,6 +36,8 @@ export interface TrackingData {
 
 export interface ApiError {
   error: string;
+  /** Permet au client d'adapter l'affichage ; le texte de `error` est déjà dans la langue demandée */
+  code?: 'registrations_paused';
 }
 
 /** Le numéro est connu de 17TRACK mais n'a pas encore de données de suivi. */

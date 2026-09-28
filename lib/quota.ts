@@ -1,6 +1,5 @@
-import { DICTIONARY } from './dictionary';
 import type { Locale } from './locale-script';
-import { post, UpstreamError } from './track17';
+import { post, RegistrationsPausedError } from './track17';
 
 /**
  * Garde-fou du quota 17TRACK : chaque numéro enregistré (endpoint register) coûte une unité de quota,
@@ -15,6 +14,8 @@ interface QuotaResponse {
   data?: {
     quota_remain?: number;
     today_used?: number;
+    /** Limite quotidienne réglée dans le tableau de bord 17TRACK (0 = aucune) */
+    max_track_daily?: number;
   };
 }
 
@@ -29,13 +30,16 @@ const dailyLimit = () => readLimit('TRACK17_DAILY_REGISTER_LIMIT', 5);
 const reserve = () => readLimit('TRACK17_QUOTA_RESERVE', 20);
 
 export async function assertRegistrationBudget(apiKey: string, locale: Locale): Promise<void> {
-  const paused = new UpstreamError(DICTIONARY[locale].errors.registrationsPaused, 503);
-  const limit = dailyLimit();
-  if (limit === 0) throw paused;
+  const paused = new RegistrationsPausedError(locale);
+  const siteLimit = dailyLimit();
+  if (siteLimit === 0) throw paused;
 
   const json = await post<QuotaResponse>('getquota', apiKey, [], locale);
   const remain = json.data?.quota_remain;
   const todayUsed = json.data?.today_used;
+  // La plus stricte des deux limites : inutile de tenter un enregistrement que 17TRACK refuserait
+  const accountLimit = json.data?.max_track_daily;
+  const limit = accountLimit ? Math.min(siteLimit, accountLimit) : siteLimit;
 
   if (typeof remain !== 'number' || typeof todayUsed !== 'number') {
     console.error('Réponse getquota inattendue :', json.data);

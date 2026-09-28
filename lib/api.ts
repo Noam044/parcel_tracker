@@ -6,6 +6,16 @@ import type { ApiError, ApiPending, TrackingData } from './types';
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLLS = 12;
 
+/** Erreur renvoyée par /api/track, avec son code éventuel pour adapter l'affichage. */
+export class TrackingError extends Error {
+  constructor(
+    message: string,
+    readonly code?: ApiError['code']
+  ) {
+    super(message);
+  }
+}
+
 function isApiError(payload: unknown): payload is ApiError {
   return typeof payload === 'object' && payload !== null && typeof (payload as ApiError).error === 'string';
 }
@@ -33,7 +43,7 @@ async function requestTracking(trackingNumber: string, locale: Locale, signal?: 
   // Une réponse non-JSON (page d'erreur d'un proxy, par exemple) ne doit pas masquer le vrai statut
   const payload: unknown = await response.json().catch(() => null);
 
-  if (isApiError(payload)) throw new Error(payload.error);
+  if (isApiError(payload)) throw new TrackingError(payload.error, payload.code);
   if (!response.ok) throw new Error(errors.httpErrorGeneric(response.status));
   if (isPending(payload)) return null;
   if (!isTrackingData(payload)) throw new Error(errors.unexpectedResponse);

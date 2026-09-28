@@ -136,6 +136,13 @@ export async function post<T>(
   return json;
 }
 
+/** Plus aucun nouveau numéro ne peut être enregistré aujourd'hui (limite du site, de 17TRACK, ou quota épuisé). */
+export class RegistrationsPausedError extends UpstreamError {
+  constructor(locale: Locale) {
+    super(DICTIONARY[locale].errors.registrationsPaused, 503);
+  }
+}
+
 const call = (endpoint: 'register' | 'gettrackinfo', apiKey: string, number: string, locale: Locale, carrier?: number) =>
   post<ApiResponse>(endpoint, apiKey, [carrier ? { number, carrier } : { number }], locale);
 
@@ -174,7 +181,7 @@ export async function registerNumber(apiKey: string, number: string, locale: Loc
 
   console.warn('Enregistrement rejeté par 17TRACK :', rejection.code, rejection.message);
   if (rejection.code !== undefined && OUT_OF_QUOTA.has(rejection.code)) {
-    throw new UpstreamError(DICTIONARY[locale].errors.registrationsPaused, 503);
+    throw new RegistrationsPausedError(locale);
   }
   throw new UpstreamError(describeRejection(rejection.code, locale));
 }

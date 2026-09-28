@@ -4,7 +4,13 @@ import { DICTIONARY } from '@/lib/dictionary';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/locale-script';
 import { assertRegistrationBudget } from '@/lib/quota';
 import { clientIp, createRateLimiter } from '@/lib/rate-limit';
-import { API_KEY_PLACEHOLDER, getTrackInfo, registerNumber, UpstreamError } from '@/lib/track17';
+import {
+  API_KEY_PLACEHOLDER,
+  getTrackInfo,
+  registerNumber,
+  RegistrationsPausedError,
+  UpstreamError,
+} from '@/lib/track17';
 import type { ApiError, ApiPending, TrackingData } from '@/lib/types';
 
 // 17TRACK accepte des numéros de 5 à 50 caractères. Un numéro de suivi contient toujours au moins un
@@ -157,6 +163,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof RateLimited) {
       return fail(errors.tooManyRequests, 429, { 'Retry-After': String(error.retryAfter) });
+    }
+    if (error instanceof RegistrationsPausedError) {
+      return Response.json(
+        { error: error.message, code: 'registrations_paused' } satisfies ApiError,
+        { status: error.status }
+      );
     }
     if (error instanceof UpstreamError) {
       return fail(error.message, error.status);
