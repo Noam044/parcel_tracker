@@ -2,7 +2,7 @@
 
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { destinationLabel, eventDescriptionText, eventLocationText } from "@/lib/display";
 import { formatPopupDate } from "@/lib/format";
 import { useT } from "@/lib/locale";
@@ -121,6 +121,10 @@ export default function TrackingMap({ events, destination, status, activeIndex =
   const isLoadedRef = useRef(false);
   const isOpeningPopupRef = useRef(false);
   const onSelectRef = useRef(onSelectEvent);
+
+  // Sur téléphone la carte ne fait que 340 px de haut : la légende y est repliée derrière un bouton
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
+  const legendId = useId();
 
   const isFinished = status === "Delivered" || status === "Returned";
   const showDestination = !!destination && !isFinished;
@@ -301,22 +305,36 @@ export default function TrackingMap({ events, destination, status, activeIndex =
       <div ref={containerRef} className="h-full w-full" />
 
       {hasPosition ? (
-        <ul className="label pointer-events-none absolute left-3 top-3 space-y-1.5 rounded border-2 border-ink bg-sheet px-3 py-2.5">
-          <li className="flex items-center gap-2.5">
-            <span aria-hidden="true" className="w-6 border-t-[3px] border-dashed border-customs" />
-            {t.map.legendPast}
-          </li>
-          {showDestination && (
+        <>
+          <button
+            type="button"
+            onClick={() => setIsLegendOpen((open) => !open)}
+            aria-expanded={isLegendOpen}
+            aria-controls={legendId}
+            className="label absolute left-3 top-3 rounded border-2 border-ink bg-sheet px-3 py-2 sm:hidden"
+          >
+            {isLegendOpen ? t.map.hideLegend : t.map.showLegend}
+          </button>
+          <ul
+            id={legendId}
+            className={`label pointer-events-none absolute left-3 space-y-1.5 rounded border-2 border-ink bg-sheet px-3 py-2.5 sm:top-3 sm:block ${isLegendOpen ? "top-14" : "top-3 hidden"}`}
+          >
             <li className="flex items-center gap-2.5">
-              <span aria-hidden="true" className="w-6 border-t-[3px] border-dotted border-ink-soft" />
-              {t.map.legendRemaining}
+              <span aria-hidden="true" className="w-6 border-t-[3px] border-dashed border-customs" />
+              {t.map.legendPast}
             </li>
-          )}
-          <li className="flex items-center gap-2.5">
-            <span aria-hidden="true" className="ml-1 size-3.5 rounded-full border-[3px] border-ink bg-signal" />
-            {t.map.legendLatest}
-          </li>
-        </ul>
+            {showDestination && (
+              <li className="flex items-center gap-2.5">
+                <span aria-hidden="true" className="w-6 border-t-[3px] border-dotted border-ink-soft" />
+                {t.map.legendRemaining}
+              </li>
+            )}
+            <li className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="ml-1 size-3.5 rounded-full border-[3px] border-ink bg-signal" />
+              {t.map.legendLatest}
+            </li>
+          </ul>
+        </>
       ) : null}
 
       {hasNoPosition && (

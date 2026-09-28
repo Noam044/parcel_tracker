@@ -4,18 +4,9 @@ import { DICTIONARY } from '@/lib/dictionary';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/locale-script';
 import { assertRegistrationBudget } from '@/lib/quota';
 import { clientIp, createRateLimiter } from '@/lib/rate-limit';
-import {
-  API_KEY_PLACEHOLDER,
-  getTrackInfo,
-  registerNumber,
-  RegistrationsPausedError,
-  UpstreamError,
-} from '@/lib/track17';
-import type { ApiError, ApiPending, TrackingData } from '@/lib/types';
-
-// 17TRACK accepte des numéros de 5 à 50 caractères. Un numéro de suivi contient toujours au moins un
-// chiffre : exiger un chiffre écarte d'emblée les saisies absurdes, qui pourraient coûter un enregistrement.
-const TRACKING_NUMBER_PATTERN = /^(?=.*\d)[A-Z0-9_-]{5,50}$/;
+import { API_KEY_PLACEHOLDER, getTrackInfo, registerNumber, UpstreamError } from '@/lib/track17';
+import { isValidTrackingNumber, normalizeTrackingNumber } from '@/lib/tracking-number';
+import type { ApiError, ApiErrorCode, ApiPending, TrackingData } from '@/lib/types';
 // Largement assez pour { trackingNumber, locale } : au-delà, la requête n'est pas légitime
 const MAX_BODY_BYTES = 1_024;
 
@@ -39,8 +30,14 @@ const inFlight = new Map<string, Promise<Outcome>>();
 
 type Outcome = { kind: 'ready'; data: TrackingData } | { kind: 'pending' };
 
-const fail = (error: string, status: number, headers?: HeadersInit) =>
-  Response.json({ error } satisfies ApiError, { status, headers });
+interface FailOptions {
+  detail?: number;
+  headers?: HeadersInit;
+}
+
+// Le texte suit la langue de la requête ; le code permet au client de le réécrire si la langue change
+const fail = (error: string, code: ApiErrorCode, status: number, { detail, headers }: FailOptions = {}) =>
+  Response.json({ error, code, detail } satisfies ApiError, { status, headers });
 
 function evictExpired<V>(map: Map<string, V>, isExpired: (value: V) => boolean) {
   for (const [key, value] of map) if (isExpired(value)) map.delete(key);
@@ -68,11 +65,9 @@ interface ParsedRequest {
 function parseBody(text: string): ParsedRequest {
   try {
     const body = JSON.parse(text);
-    // Les espaces sont souvent copiés avec le numéro (ex: "1Z 999 AA1 ..."). La casse est normalisée pour
-    // qu'un même colis saisi en minuscules partage le cache et ne soit jamais enregistré deux fois.
-    const raw = typeof body?.trackingNumber === 'string' ? body.trackingNumber.replace(/\s+/g, '').toUpperCase() : '';
+    const number = typeof body?.trackingNumber === 'string' ? normalizeTrackingNumber(body.trackingNumber) : '';
     return {
-      trackingNumber: TRACKING_NUMBER_PATTERN.test(raw) ? raw : null,
+      trackingNumber: isValidTrackingNumber(number) ? number : null,
       // La langue vient du client (voir lib/api.ts) ; un client hors-jeu ou absent retombe sur le français
       locale: isLocale(body?.locale) ? body.locale : DEFAULT_LOCALE,
     };
@@ -113,14 +108,14 @@ class RateLimited extends Error {
 
 export async function POST(request: NextRequest) {
   if (isCrossSite(request)) {
-    return fail(DICTIONARY[DEFAULT_LOCALE].errors.forbidden, 403);
+    return fail(DICTIONARY[DEFAULT_LOCALE].errors.forbidden, 'forbidden', 403);
   }
   // Une requête « simple » (text/plain) échappe au contrôle CORS du navigateur : on exige du JSON
   if (!request.headers.get('content-type')?.includes('application/json')) {
-    return fail(DICTIONARY[DEFAULT_LOCALE].errors.forbidden, 415);
+    return fail(DICTIONARY[DEFAULT_LOCALE].errors.forbidden, 'forbidden', 415);
   }
   if (Number(request.headers.get('content-length')) > MAX_BODY_BYTES) {
-    return fail(DICTIONARY[DEFAULT_LOCALE].errors.forbidden, 413);
+    return fail(DICTIONARY[DEFAULT_LOCALE].errors.forbidden, 'forbidden', 413);
   }
 
   const text = await request.text().catch(() => '');
@@ -130,11 +125,11 @@ export async function POST(request: NextRequest) {
   const ip = clientIp(request.headers);
   const { allowed, retryAfter } = requestLimiter.consume(ip);
   if (!allowed) {
-    return fail(errors.tooManyRequests, 429, { 'Retry-After': String(retryAfter) });
+    return fail(errors.tooManyRequests, 'rate_limited', 429, { headers: { 'Retry-After': String(retryAfter) } });
   }
 
   if (!trackingNumber) {
-    return fail(errors.invalidNumber, 400);
+    return fail(errors.invalidNumber, 'invalid_number', 400);
   }
 
   const cached = readyCache.get(trackingNumber);
@@ -145,7 +140,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.TRACK17_API_KEY;
   if (!apiKey || apiKey === API_KEY_PLACEHOLDER) {
     console.error("TRACK17_API_KEY n'est pas configurée");
-    return fail(errors.keyNotConfigured, 500);
+    return fail(errors.keyNotConfigured, 'not_configured', 500);
   }
 
   const flightKey = `${trackingNumber}|${locale}`;
@@ -162,18 +157,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ pending: true } satisfies ApiPending, { status: 202 });
   } catch (error) {
     if (error instanceof RateLimited) {
-      return fail(errors.tooManyRequests, 429, { 'Retry-After': String(error.retryAfter) });
-    }
-    if (error instanceof RegistrationsPausedError) {
-      return Response.json(
-        { error: error.message, code: 'registrations_paused' } satisfies ApiError,
-        { status: error.status }
-      );
+      return fail(errors.tooManyRequests, 'rate_limited', 429, { headers: { 'Retry-After': String(error.retryAfter) } });
     }
     if (error instanceof UpstreamError) {
-      return fail(error.message, error.status);
+      return fail(error.message, error.code, error.status, { detail: error.detail });
     }
     console.error('Erreur dans /api/track:', error);
-    return fail(errors.internalError, 500);
+    return fail(errors.internalError, 'internal', 500);
   }
 }

@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { eventDescriptionText, eventLocationText } from "@/lib/display";
 import { formatTime } from "@/lib/format";
 import { groupEventsByDay } from "@/lib/journey";
 import { useT } from "@/lib/locale";
 import type { TrackingEvent } from "@/lib/types";
+
+// Au-delà, le message brut du transporteur (souvent des champs collés bout à bout) est replié sur 3 lignes
+const LONG_DESCRIPTION = 180;
 
 interface TrackingTimelineProps {
   events: TrackingEvent[];
@@ -18,6 +21,14 @@ export default function TrackingTimeline({ events, activeIndex, onSelect }: Trac
   const days = groupEventsByDay(events, locale);
   // Le marqueur orange de la carte est la dernière position connue : même repère ici
   const latestLocatedIndex = events.findIndex((event) => event.coordinates);
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+
+  const toggleExpanded = (index: number) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(index)) next.add(index);
+      return next;
+    });
 
   // Sélectionner un marqueur sur la carte amène l'étape correspondante à l'écran
   useEffect(() => {
@@ -57,12 +68,19 @@ export default function TrackingTimeline({ events, activeIndex, onSelect }: Trac
                 const isLatest = index === latestLocatedIndex;
                 const isActive = index === activeIndex;
                 const hasPosition = !!event.coordinates;
+                const description = eventDescriptionText(event, t);
+                const isLong = description.length > LONG_DESCRIPTION;
+                const isExpanded = expanded.has(index);
+                const descriptionId = `event-${index}-description`;
 
                 const content = (
                   <>
                     <p className="text-[15px] font-semibold leading-snug">{eventLocationText(event, locale, t)}</p>
-                    <p className="mt-0.5 break-words text-[15px] leading-snug text-ink-soft">
-                      {eventDescriptionText(event, t)}
+                    <p
+                      id={descriptionId}
+                      className={`mt-0.5 break-words text-[15px] leading-snug text-ink-soft ${isLong && !isExpanded ? "line-clamp-3" : ""}`}
+                    >
+                      {description}
                     </p>
                   </>
                 );
@@ -102,6 +120,19 @@ export default function TrackingTimeline({ events, activeIndex, onSelect }: Trac
                         </button>
                       ) : (
                         <div className="-ml-2 mb-1 px-2 py-1.5">{content}</div>
+                      )}
+
+                      {/* Hors du bouton de l'étape : un bouton ne peut pas en contenir un autre */}
+                      {isLong && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(index)}
+                          aria-expanded={isExpanded}
+                          aria-controls={descriptionId}
+                          className="label mb-2 py-2 text-ink-soft underline underline-offset-4 hover:text-customs"
+                        >
+                          {isExpanded ? t.timeline.showLess : t.timeline.showMore}
+                        </button>
                       )}
                     </div>
                   </li>

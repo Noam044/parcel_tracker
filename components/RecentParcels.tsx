@@ -19,7 +19,7 @@ export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber:
         <h2 id="recent-title" className="font-wide text-xl font-extrabold">
           {t.recent.title}
         </h2>
-        <button type="button" onClick={clear} className="label underline underline-offset-4 hover:text-customs">
+        <button type="button" onClick={clear} className="label -my-2.5 py-2.5 underline underline-offset-4 hover:text-customs">
           {t.recent.clear}
         </button>
       </div>
@@ -38,7 +38,7 @@ export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber:
               <button
                 type="button"
                 onClick={() => onSelect(entry.number)}
-                className="flex items-center gap-3 text-left font-mono text-[15px] font-medium hover:text-customs"
+                className="-my-2.5 flex items-center gap-3 py-2.5 text-left font-mono text-[15px] font-medium hover:text-customs"
               >
                 <span aria-hidden="true" className={`size-3 shrink-0 ${STATUS_CLASSES[entry.status].marker}`} />
                 <span className="break-all">{entry.number}</span>
@@ -48,7 +48,7 @@ export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber:
                 <button
                   type="button"
                   onClick={() => onSelect(entry.number)}
-                  className="label rounded border-2 border-ink px-3 py-1.5 hover:bg-ink hover:text-sheet"
+                  className="label rounded border-2 border-ink px-3 py-2.5 hover:bg-ink hover:text-sheet"
                 >
                   {t.recent.refresh}
                 </button>
@@ -56,7 +56,7 @@ export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber:
                   type="button"
                   onClick={() => remove(entry.number)}
                   aria-label={t.recent.removeAria(entry.number)}
-                  className="flex size-8 items-center justify-center rounded text-lg leading-none text-ink-soft hover:bg-ink hover:text-sheet"
+                  className="flex size-11 items-center justify-center rounded text-xl leading-none text-ink-soft hover:bg-ink hover:text-sheet"
                 >
                   ×
                 </button>

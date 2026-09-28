@@ -34,10 +34,26 @@ export interface TrackingData {
   destination?: Destination;
 }
 
+export type ApiErrorCode =
+  | 'invalid_number'
+  | 'forbidden'
+  | 'rate_limited'
+  | 'registrations_paused'
+  | 'busy'
+  | 'network'
+  | 'upstream_http'
+  | 'upstream'
+  | 'rejected'
+  | 'not_configured'
+  | 'internal';
+
 export interface ApiError {
+  /** Message déjà rédigé dans la langue de la requête : repli pour un client qui ne connaît pas `code` */
   error: string;
-  /** Permet au client d'adapter l'affichage ; le texte de `error` est déjà dans la langue demandée */
-  code?: 'registrations_paused';
+  /** Permet au client de réécrire le message dans la langue affichée, même si elle change ensuite */
+  code?: ApiErrorCode;
+  /** Précision numérique : statut HTTP de 17TRACK (upstream_http) ou code de rejet (rejected) */
+  detail?: number;
 }
 
 /** Le numéro est connu de 17TRACK mais n'a pas encore de données de suivi. */

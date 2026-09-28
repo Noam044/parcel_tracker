@@ -5,10 +5,10 @@ import { parseS10 } from "@/lib/journey";
 import { useT } from "@/lib/locale";
 
 // La série pèse environ 6,3 fois la taille de police en largeur ; les libellés « Service » et « Origine »
-// (~118 px à eux deux) et les écarts (32 px) ne rétrécissent pas. La taille se déduit donc de la largeur
+// (~129 px à eux deux en 12 px) et les écarts (32 px) ne rétrécissent pas. La taille se déduit donc de la largeur
 // du bloc (unités cqw) pour que le numéro tienne toujours sur une ligne, dans n'importe quelle colonne.
 const NUMBER_CLASS =
-  "font-mono font-medium leading-none tracking-tight text-[min(2.75rem,calc((100cqw_-_9.4rem)/6.3))]";
+  "font-mono font-medium leading-none tracking-tight text-[min(2.75rem,calc((100cqw_-_10.1rem)/6.3))]";
 
 /**
  * Affiche un numéro de suivi comme sur une étiquette. Un numéro postal international (norme S10)

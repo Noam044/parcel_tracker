@@ -3,7 +3,7 @@
 import { useT } from "@/lib/locale";
 
 /** État d'attente : un pointillé qui avance, comme le colis. */
-export default function SearchProgress({ isWaiting }: { isWaiting: boolean }) {
+export default function SearchProgress({ isWaiting, onCancel }: { isWaiting: boolean; onCancel: () => void }) {
   const { t } = useT();
 
   return (
@@ -29,6 +29,14 @@ export default function SearchProgress({ isWaiting }: { isWaiting: boolean }) {
           {isWaiting ? t.progress.newNumberTitle : t.progress.searchTitle}
         </p>
         {isWaiting && <p className="mt-3 max-w-[60ch] text-[15px] text-ink-soft">{t.progress.newNumberHint}</p>}
+        {/* Un nouveau numéro peut faire patienter jusqu'à une minute : on peut abandonner */}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="label mt-6 rounded border-2 border-ink px-4 py-2.5 hover:bg-ink hover:text-sheet"
+        >
+          {t.progress.cancel}
+        </button>
       </div>
     </section>
   );

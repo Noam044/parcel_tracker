@@ -1,6 +1,7 @@
 import { DICTIONARY } from './dictionary';
+import { rejectionText } from './display';
 import type { Locale } from './locale-script';
-import type { Coordinates, TrackingStatus } from './types';
+import type { ApiErrorCode, Coordinates, TrackingStatus } from './types';
 
 const API_BASE = 'https://api.17track.net/track/v2.2';
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -79,21 +80,24 @@ export function carrierHint(number: string): number | undefined {
   return CARRIER_HINTS.find(({ pattern }) => pattern.test(number))?.carrier;
 }
 
-/** Message affichable pour un rejet 17TRACK, dans la langue demandée ; le code est conservé pour qui doit investiguer. */
-export function describeRejection(code: number | undefined, locale: Locale): string {
-  const errors = DICTIONARY[locale].errors;
-  const known = code !== undefined ? errors.rejection[String(code)] : undefined;
-  return `${known ?? errors.rejectionFallback} (code ${code})`;
-}
-
-/** Erreur liée à la communication avec 17TRACK (renvoyée au client en 502, ou 503 si `status` le précise). */
+/**
+ * Erreur liée à la communication avec 17TRACK (renvoyée au client en 502, ou 503 si `status` le précise).
+ * Le message est rédigé dans la langue de la requête ; `code` et `detail` permettent au client de le
+ * réécrire dans la langue affichée.
+ */
 export class UpstreamError extends Error {
   constructor(
     message: string,
-    readonly status = 502
+    readonly code: ApiErrorCode,
+    readonly status = 502,
+    readonly detail?: number
   ) {
     super(message);
   }
+}
+
+function rejectionError(code: number | undefined, locale: Locale): UpstreamError {
+  return new UpstreamError(rejectionText(code, DICTIONARY[locale]), 'rejected', 502, code);
 }
 
 /** Appel brut à 17TRACK. Les détails techniques restent dans les logs serveur, jamais dans la réponse au client. */
@@ -114,24 +118,24 @@ export async function post<T>(
     });
   } catch (error) {
     console.error(`17TRACK ${endpoint} injoignable :`, error);
-    throw new UpstreamError(errors.networkError);
+    throw new UpstreamError(errors.networkError, 'network');
   }
 
   // 17TRACK limite chaque compte à 3 requêtes par seconde
   if (response.status === 429) {
     console.warn(`17TRACK ${endpoint} : limite de débit atteinte (429)`);
-    throw new UpstreamError(errors.busy, 503);
+    throw new UpstreamError(errors.busy, 'busy', 503);
   }
   if (!response.ok) {
     console.error(`17TRACK ${endpoint} : HTTP ${response.status}`);
-    throw new UpstreamError(errors.upstreamHttpError(response.status));
+    throw new UpstreamError(errors.upstreamHttpError(response.status), 'upstream_http', 502, response.status);
   }
 
   const json = (await response.json().catch(() => null)) as (T & { code: number; message?: string }) | null;
   if (!json || json.code !== 0) {
     // Ex: clé invalide ou compte suspendu. Le message de 17TRACK peut décrire le compte : il n'est pas relayé.
     console.error(`17TRACK ${endpoint} : code ${json?.code}`, json?.message);
-    throw new UpstreamError(errors.upstreamGenericError);
+    throw new UpstreamError(errors.upstreamGenericError, 'upstream');
   }
   return json;
 }
@@ -139,7 +143,7 @@ export async function post<T>(
 /** Plus aucun nouveau numéro ne peut être enregistré aujourd'hui (limite du site, de 17TRACK, ou quota épuisé). */
 export class RegistrationsPausedError extends UpstreamError {
   constructor(locale: Locale) {
-    super(DICTIONARY[locale].errors.registrationsPaused, 503);
+    super(DICTIONARY[locale].errors.registrationsPaused, 'registrations_paused', 503);
   }
 }
 
@@ -163,7 +167,7 @@ export async function getTrackInfo(apiKey: string, number: string, locale: Local
   if (rejection?.code === NOT_REGISTERED) return { status: 'unregistered' };
   if (rejection) {
     console.warn('Numéro rejeté par 17TRACK :', rejection.code, rejection.message);
-    throw new UpstreamError(describeRejection(rejection.code, locale));
+    throw rejectionError(rejection.code, locale);
   }
 
   return { status: 'pending' };
@@ -183,7 +187,7 @@ export async function registerNumber(apiKey: string, number: string, locale: Loc
   if (rejection.code !== undefined && OUT_OF_QUOTA.has(rejection.code)) {
     throw new RegistrationsPausedError(locale);
   }
-  throw new UpstreamError(describeRejection(rejection.code, locale));
+  throw rejectionError(rejection.code, locale);
 }
 
 export function mapStatus(raw: string | null | undefined, subStatus?: string | null): TrackingStatus {

@@ -1,19 +1,28 @@
-import { DICTIONARY } from './dictionary';
+import type { Dictionary } from './dictionary';
+import { apiErrorText } from './display';
 import type { Locale } from './locale-script';
-import type { ApiError, ApiPending, TrackingData } from './types';
+import type { ApiError, ApiErrorCode, ApiPending, TrackingData } from './types';
 
 // Un numéro tout juste enregistré peut mettre un moment à recevoir ses premières données
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLLS = 12;
 
-/** Erreur renvoyée par /api/track, avec son code éventuel pour adapter l'affichage. */
+/**
+ * Échec d'une recherche. Le message n'est rédigé qu'à l'affichage (describe), dans la langue du moment :
+ * basculer FR/EN après une erreur traduit aussi le bandeau.
+ */
 export class TrackingError extends Error {
   constructor(
-    message: string,
-    readonly code?: ApiError['code']
+    readonly describe: (t: Dictionary) => string,
+    readonly code?: ApiErrorCode
   ) {
-    super(message);
+    super(code ?? 'tracking error');
   }
+}
+
+function fromApiError({ error, code, detail }: ApiError): TrackingError {
+  // Un code inconnu (client plus ancien que le serveur) : le message du serveur fait foi
+  return new TrackingError((t) => (code ? apiErrorText(code, detail, t) : error), code);
 }
 
 function isApiError(payload: unknown): payload is ApiError {
@@ -30,7 +39,6 @@ function isTrackingData(payload: unknown): payload is TrackingData {
 
 /** Une seule requête : les données de suivi, ou null si le colis n'a pas encore de données. */
 async function requestTracking(trackingNumber: string, locale: Locale, signal?: AbortSignal): Promise<TrackingData | null> {
-  const errors = DICTIONARY[locale].errors;
   const response = await fetch('/api/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -43,10 +51,10 @@ async function requestTracking(trackingNumber: string, locale: Locale, signal?: 
   // Une réponse non-JSON (page d'erreur d'un proxy, par exemple) ne doit pas masquer le vrai statut
   const payload: unknown = await response.json().catch(() => null);
 
-  if (isApiError(payload)) throw new TrackingError(payload.error, payload.code);
-  if (!response.ok) throw new Error(errors.httpErrorGeneric(response.status));
+  if (isApiError(payload)) throw fromApiError(payload);
+  if (!response.ok) throw new TrackingError((t) => t.errors.httpErrorGeneric(response.status));
   if (isPending(payload)) return null;
-  if (!isTrackingData(payload)) throw new Error(errors.unexpectedResponse);
+  if (!isTrackingData(payload)) throw new TrackingError((t) => t.errors.unexpectedResponse);
 
   return payload;
 }

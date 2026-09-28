@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useT } from "@/lib/locale";
+import { isValidTrackingNumber, normalizeTrackingNumber } from "@/lib/tracking-number";
 
 interface TrackingFormProps {
   value: string;
@@ -14,20 +15,23 @@ interface TrackingFormProps {
 
 export default function TrackingForm({ value, onChange, onSubmit, isLoading, compact = false }: TrackingFormProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [isMissing, setIsMissing] = useState(false);
+  const [problem, setProblem] = useState<"missing" | "invalid" | null>(null);
   const { t } = useT();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Le bouton reste toujours actif : un bouton grisé passe pour cassé. Un champ vide reçoit une explication.
-    if (value.trim() === "") {
-      setIsMissing(true);
+    // Le bouton reste toujours actif : un bouton grisé passe pour cassé. Une saisie vide ou impossible
+    // reçoit une explication sur place, sans aller-retour avec le serveur.
+    const number = normalizeTrackingNumber(value);
+    const found = number === "" ? "missing" : isValidTrackingNumber(number) ? null : "invalid";
+    if (found) {
+      setProblem(found);
       inputRef.current?.focus();
       return;
     }
     // Relancer une recherche pendant qu'une autre est en cours remplace simplement la précédente
-    onSubmit(value.trim());
+    onSubmit(number);
   };
 
   return (
@@ -44,16 +48,16 @@ export default function TrackingForm({ value, onChange, onSubmit, isLoading, com
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
-            setIsMissing(false);
+            setProblem(null);
           }}
-          placeholder="LP123456785CN"
+          placeholder={t.form.placeholder}
           spellCheck={false}
           autoCapitalize="characters"
           autoCorrect="off"
           enterKeyHint="search"
-          aria-invalid={isMissing}
-          aria-describedby={isMissing || !compact ? "tracking-number-hint" : undefined}
-          className="min-w-0 flex-1 bg-transparent px-4 py-4 font-mono text-lg tracking-wide text-ink outline-none placeholder:text-ink-soft/50 sm:text-xl"
+          aria-invalid={!!problem}
+          aria-describedby={problem || !compact ? "tracking-number-hint" : undefined}
+          className="min-w-0 flex-1 bg-transparent px-4 py-4 font-mono text-lg tracking-wide text-ink outline-none placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-soft/70 sm:text-xl"
         />
         <button
           type="submit"
@@ -64,9 +68,9 @@ export default function TrackingForm({ value, onChange, onSubmit, isLoading, com
         </button>
       </div>
 
-      {isMissing ? (
+      {problem ? (
         <p id="tracking-number-hint" role="alert" className="mt-3 text-[15px] font-semibold text-alert">
-          {t.form.missingNumber}
+          {problem === "missing" ? t.form.missingNumber : t.errors.invalidNumber}
         </p>
       ) : (
         !compact && (

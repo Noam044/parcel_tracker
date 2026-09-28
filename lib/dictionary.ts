@@ -17,7 +17,8 @@ export interface Dictionary {
     statuses: string;
     goodToKnow: string;
     darkMode: string;
-    language: string;
+    /** Rédigé dans la langue d'arrivée : c'est elle que l'utilisateur cherche */
+    switchLanguage: string;
   };
   footer: {
     trackingBy: string;
@@ -38,6 +39,8 @@ export interface Dictionary {
     submitLoading: string;
     missingNumber: string;
     hint: string;
+    placeholder: string;
+    backHome: string;
   };
   banner: {
     errorTag: string;
@@ -50,6 +53,7 @@ export interface Dictionary {
     newNumberTitle: string;
     searchTitle: string;
     newNumberHint: string;
+    cancel: string;
   };
   specimen: {
     title: string;
@@ -75,6 +79,8 @@ export interface Dictionary {
     eta: string;
     etaDetailApprox: string;
     etaDetailCarrier: string;
+    /** Titre invisible, annoncé par les lecteurs d'écran quand le résultat arrive */
+    resultHeading: (number: string, status: string) => string;
   };
   progressSteps: {
     registered: string;
@@ -89,6 +95,8 @@ export interface Dictionary {
     legendUnknown: string;
     inTransitFallback: string;
     statusUpdateFallback: string;
+    showMore: string;
+    showLess: string;
   };
   map: {
     destinationTitle: string;
@@ -98,6 +106,8 @@ export interface Dictionary {
     noPositionTitle: string;
     noPositionText: string;
     tokenMissing: string;
+    showLegend: string;
+    hideLegend: string;
   };
   recent: {
     title: string;
@@ -112,6 +122,10 @@ export interface Dictionary {
   };
   status: Record<TrackingStatus, { label: string; description: string }>;
   autoDetectedCarrier: string;
+  meta: {
+    description: string;
+    parcelTitle: (number: string, status: string) => string;
+  };
   errors: {
     invalidNumber: string;
     keyNotConfigured: string;
@@ -138,7 +152,7 @@ const fr: Dictionary = {
     statuses: 'Statuts',
     goodToKnow: 'Bon à savoir',
     darkMode: 'Mode sombre',
-    language: 'Langue',
+    switchLanguage: 'Switch to English',
   },
   footer: {
     trackingBy: 'Suivi fourni par',
@@ -160,6 +174,8 @@ const fr: Dictionary = {
     submitLoading: 'Recherche…',
     missingNumber: 'Saisissez un numéro de suivi, puis cliquez sur « Suivre le colis ».',
     hint: 'Tous les transporteurs, sans compte. Le transporteur est reconnu automatiquement.',
+    placeholder: 'Collez votre numéro ici',
+    backHome: 'Accueil et derniers colis',
   },
   banner: {
     errorTag: 'Erreur',
@@ -173,6 +189,7 @@ const fr: Dictionary = {
     searchTitle: 'Recherche du colis…',
     newNumberHint:
       'Un numéro tout juste expédié peut mettre quelques minutes à apparaître. La page se met à jour toute seule.',
+    cancel: 'Annuler la recherche',
   },
   specimen: {
     title: 'Exemple de numéro',
@@ -199,10 +216,11 @@ const fr: Dictionary = {
     eta: 'Arrivée estimée',
     etaDetailApprox: 'estimation indicative',
     etaDetailCarrier: 'selon le transporteur',
+    resultHeading: (number, status) => `Suivi du colis ${number} : ${status}`,
   },
   progressSteps: {
     registered: 'Enregistré',
-    inTransit: 'En acheminement',
+    inTransit: 'En transit',
     delivered: 'Livré',
     returned: 'Retourné',
     exception: 'Incident',
@@ -213,6 +231,8 @@ const fr: Dictionary = {
     legendUnknown: 'Lieu inconnu',
     inTransitFallback: 'En transit',
     statusUpdateFallback: 'Mise à jour du statut',
+    showMore: 'Afficher tout le message',
+    showLess: 'Réduire le message',
   },
   map: {
     destinationTitle: 'Destination',
@@ -222,6 +242,8 @@ const fr: Dictionary = {
     noPositionTitle: 'Position indisponible',
     noPositionText: "Le transporteur n'indique pas les lieux de passage de ce colis.",
     tokenMissing: "La carte est indisponible : la variable NEXT_PUBLIC_MAPBOX_TOKEN n'est pas configurée.",
+    showLegend: 'Légende',
+    hideLegend: 'Masquer la légende',
   },
   recent: {
     title: 'Derniers colis suivis',
@@ -273,8 +295,13 @@ const fr: Dictionary = {
     },
   },
   autoDetectedCarrier: 'Transporteur détecté automatiquement',
+  meta: {
+    description: 'Suivez vos colis en temps réel et visualisez leur itinéraire sur une carte.',
+    parcelTitle: (number, status) => `${number} · ${status} — Parcel Tracker`,
+  },
   errors: {
-    invalidNumber: 'Numéro de suivi manquant ou invalide.',
+    invalidNumber:
+      "Ce numéro de suivi n'est pas valide : il doit compter de 5 à 50 lettres ou chiffres, dont au moins un chiffre.",
     keyNotConfigured: "Le service de suivi n'est pas configuré.",
     internalError: 'Une erreur interne est survenue.',
     networkError: 'Impossible de joindre 17TRACK, veuillez réessayer.',
@@ -307,7 +334,7 @@ const en: Dictionary = {
     statuses: 'Statuses',
     goodToKnow: 'Good to know',
     darkMode: 'Dark mode',
-    language: 'Language',
+    switchLanguage: 'Passer en français',
   },
   footer: {
     trackingBy: 'Tracking provided by',
@@ -328,6 +355,8 @@ const en: Dictionary = {
     submitLoading: 'Searching…',
     missingNumber: 'Enter a tracking number, then click "Track parcel".',
     hint: 'Every carrier, no account needed. The carrier is recognised automatically.',
+    placeholder: 'Paste your tracking number',
+    backHome: 'Home and recent parcels',
   },
   banner: {
     errorTag: 'Error',
@@ -340,6 +369,7 @@ const en: Dictionary = {
     newNumberTitle: 'The parcel is being searched for across the global network…',
     searchTitle: 'Searching for the parcel…',
     newNumberHint: 'A number that was just shipped can take a few minutes to appear. This page updates itself.',
+    cancel: 'Cancel search',
   },
   specimen: {
     title: 'Example number',
@@ -366,6 +396,7 @@ const en: Dictionary = {
     eta: 'Estimated arrival',
     etaDetailApprox: 'rough estimate',
     etaDetailCarrier: "per the carrier",
+    resultHeading: (number, status) => `Tracking for parcel ${number}: ${status}`,
   },
   progressSteps: {
     registered: 'Registered',
@@ -380,6 +411,8 @@ const en: Dictionary = {
     legendUnknown: 'Unknown place',
     inTransitFallback: 'In transit',
     statusUpdateFallback: 'Status update',
+    showMore: 'Show full message',
+    showLess: 'Show less',
   },
   map: {
     destinationTitle: 'Destination',
@@ -389,6 +422,8 @@ const en: Dictionary = {
     noPositionTitle: 'Position unavailable',
     noPositionText: "The carrier doesn't report this parcel's locations.",
     tokenMissing: 'The map is unavailable: the NEXT_PUBLIC_MAPBOX_TOKEN environment variable is not set.',
+    showLegend: 'Legend',
+    hideLegend: 'Hide legend',
   },
   recent: {
     title: 'Recently tracked parcels',
@@ -440,8 +475,12 @@ const en: Dictionary = {
     },
   },
   autoDetectedCarrier: 'Automatically detected carrier',
+  meta: {
+    description: 'Track your parcels in real time and see their route on a map.',
+    parcelTitle: (number, status) => `${number} · ${status} — Parcel Tracker`,
+  },
   errors: {
-    invalidNumber: 'Tracking number missing or invalid.',
+    invalidNumber: "This tracking number isn't valid: it must be 5 to 50 letters or digits, including at least one digit.",
     keyNotConfigured: 'The tracking service is not configured.',
     internalError: 'An internal error occurred.',
     networkError: 'Could not reach 17TRACK, please try again.',

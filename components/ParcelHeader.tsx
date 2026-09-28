@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { carrierText } from "@/lib/display";
 import { formatDistance, formatDuration, formatEventDate, formatLongDate } from "@/lib/format";
 import type { JourneyStats } from "@/lib/journey";
@@ -25,7 +26,16 @@ function Progress({ status, t }: { status: TrackingData["status"]; t: Dictionary
           <div
             className={`h-[6px] ${index < active ? "bg-ink" : index === active ? STATUS_CLASSES[status].segment : "bg-rule"}`}
           />
-          <p className={`label mt-2 ${index === active ? "font-bold text-ink" : "text-ink-soft"}`}>{label}</p>
+          {/*
+            Trois colonnes d'à peine 90 px sur téléphone : sans espacement de lettres, « Enregistré » y tient.
+            Sous 360 px elles n'en font plus que 70 : seule l'étape en cours reste écrite (les autres restent
+            lues par les lecteurs d'écran), les barres montrant toujours les trois étapes.
+          */}
+          <p
+            className={`label mt-2 max-sm:tracking-normal ${index === active ? "whitespace-nowrap font-bold text-ink" : "text-ink-soft max-[359px]:sr-only"}`}
+          >
+            {label}
+          </p>
         </li>
       ))}
     </ol>
@@ -47,9 +57,19 @@ export default function ParcelHeader({ data, stats }: { data: TrackingData; stat
   const { locale, t } = useT();
   const meta = t.status[data.status];
   const estimate = data.estimatedDelivery ? formatLongDate(data.estimatedDelivery, locale) : "";
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+
+  // Le résultat remplace l'écran d'attente : le focus y est placé pour qu'un lecteur d'écran l'annonce et
+  // que la navigation au clavier reparte d'ici (le bouton cliqué dans l'historique a disparu entre-temps)
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+  }, []);
 
   return (
     <section aria-label={t.parcelHeader.summaryAria} className="label-card animate-fade-up p-6 md:p-8">
+      <h2 ref={headingRef} tabIndex={-1} className="sr-only">
+        {t.parcelHeader.resultHeading(data.trackingNumber, meta.label)}
+      </h2>
       <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1">
           <p className="label mb-4 text-ink-soft">{t.form.numberLabel}</p>

@@ -6,7 +6,10 @@ import { useT } from "@/lib/locale";
  * Curseur FR / EN, jumeau de ThemeToggle. Comme pour le soleil et la lune, les deux libellés sont
  * toujours présents dans le DOM et basculés par la variante CSS « lang-en: » (voir globals.css), pas
  * par l'état React : le curseur est donc déjà à la bonne place au premier affichage, sans saut à
- * l'hydratation. Seuls aria-checked/aria-label (invisibles à l'œil) suivent l'état React.
+ * l'hydratation.
+ *
+ * Pour un lecteur d'écran, ce n'est pas un interrupteur (« Langue, activé » ne dit pas laquelle) mais un
+ * bouton qui annonce la langue d'arrivée, rédigé et prononcé dans cette langue : « Switch to English ».
  */
 export default function LocaleToggle() {
   const { locale, setLocale, t } = useT();
@@ -15,9 +18,9 @@ export default function LocaleToggle() {
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={isEnglish}
-      aria-label={t.header.language}
+      aria-label={t.header.switchLanguage}
+      title={t.header.switchLanguage}
+      lang={isEnglish ? "fr" : "en"}
       onClick={() => setLocale(isEnglish ? "fr" : "en")}
       // py-2.5 agrandit la zone tactile (28 px de curseur → 48 px) sans changer l'apparence
       className="flex items-center gap-2.5 py-2.5"
