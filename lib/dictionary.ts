@@ -107,6 +107,7 @@ export interface Dictionary {
     noPositionText: string;
     tokenMissing: string;
     showLegend: string;
+    explore: string;
     hideLegend: string;
   };
   recent: {
@@ -243,6 +244,7 @@ const fr: Dictionary = {
     noPositionText: "Le transporteur n'indique pas les lieux de passage de ce colis.",
     tokenMissing: "La carte est indisponible : la variable NEXT_PUBLIC_MAPBOX_TOKEN n'est pas configurée.",
     showLegend: 'Légende',
+    explore: 'Explorer la carte',
     hideLegend: 'Masquer la légende',
   },
   recent: {
@@ -423,6 +425,7 @@ const en: Dictionary = {
     noPositionText: "The carrier doesn't report this parcel's locations.",
     tokenMissing: 'The map is unavailable: the NEXT_PUBLIC_MAPBOX_TOKEN environment variable is not set.',
     showLegend: 'Legend',
+    explore: 'Explore the map',
     hideLegend: 'Hide legend',
   },
   recent: {

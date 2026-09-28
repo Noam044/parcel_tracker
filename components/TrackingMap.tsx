@@ -2,35 +2,32 @@
 
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { destinationLabel, eventDescriptionText, eventLocationText } from "@/lib/display";
 import { formatPopupDate } from "@/lib/format";
 import { useT } from "@/lib/locale";
 import type { Dictionary } from "@/lib/dictionary";
 import type { Locale } from "@/lib/locale-script";
+import { chronologicalPath, MAP_THEMES, type MapView } from "@/lib/map-view";
 import { useTheme, type Theme } from "@/lib/theme";
-import type { Coordinates, Destination, TrackingEvent, TrackingStatus } from "@/lib/types";
-
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+import type { Coordinates, Destination, TrackingEvent } from "@/lib/types";
 
 // Les sources et layers Mapbox partagent le même id
 const PAST_ROUTE = "past-route";
 const FUTURE_ROUTE = "future-route";
 
-// Style de fond et couleurs du tracé pour chaque thème. Mapbox ne lit pas les variables CSS : les valeurs
-// reprennent --color-customs et --color-ink-soft de chaque thème (voir globals.css).
-const MAP_THEMES = {
-  light: { style: "mapbox://styles/mapbox/light-v11", route: "#00794c", remaining: "#4b5561" },
-  dark: { style: "mapbox://styles/mapbox/dark-v11", route: "#34c88a", remaining: "#97a3ae" },
-} satisfies Record<Theme, { style: string; route: string; remaining: string }>;
+const styleUrl = (theme: Theme) => `mapbox://styles/${MAP_THEMES[theme].style}`;
 
 interface TrackingMapProps {
-  events?: TrackingEvent[];
+  token: string;
+  events: TrackingEvent[];
+  /** Fournie seulement tant que le colis est en route */
   destination?: Destination;
-  status?: TrackingStatus;
+  /** Vue de départ, identique à celle de l'aperçu statique (voir lib/map-view.ts) */
+  initialView: MapView;
   /** Index (dans `events`) de l'étape mise en avant */
-  activeIndex?: number | null;
-  onSelectEvent?: (index: number | null) => void;
+  activeIndex: number | null;
+  onSelectEvent: (index: number | null) => void;
 }
 
 function createElement(className: string, text?: string): HTMLDivElement {
@@ -49,9 +46,9 @@ function createPopupContent(title: string, body?: string, footer?: string): HTML
   return content;
 }
 
-function createMarker(kind: "past" | "latest" | "destination"): HTMLDivElement {
+function createMarker(kind: "past" | "latest" | "destination", isActive = false): HTMLDivElement {
   const el = createElement(`trk-marker${kind === "past" ? "" : ` trk-marker--${kind}`}`);
-  el.dataset.active = "false";
+  el.dataset.active = String(isActive);
   return el;
 }
 
@@ -76,31 +73,15 @@ function addRoute(map: mapboxgl.Map, id: string, coordinates: Coordinates[], col
   });
 }
 
-/** Coordonnées dans l'ordre chronologique, sans doublons consécutifs. */
-function chronologicalPath(events: TrackingEvent[]): Coordinates[] {
-  const path: Coordinates[] = [];
-  for (const { coordinates } of [...events].reverse()) {
-    if (!coordinates) continue;
-    const last = path[path.length - 1];
-    if (!last || last[0] !== coordinates[0] || last[1] !== coordinates[1]) path.push(coordinates);
-  }
-  return path;
-}
-
-/**
- * Trace le trajet parcouru, puis le trajet restant (en ligne droite) jusqu'à la destination.
- * `destination` n'est fourni que tant que le colis est en route.
- */
+/** Trace le trajet parcouru, puis le trajet restant (en ligne droite) jusqu'à la destination. */
 function drawRoutes(
   map: mapboxgl.Map,
-  events: TrackingEvent[] | undefined,
+  events: TrackingEvent[],
   destination: Destination | undefined,
   colors: (typeof MAP_THEMES)[Theme]
 ) {
   try {
     clearRoutes(map);
-    if (!events?.length) return;
-
     const path = chronologicalPath(events);
     if (path.length >= 2) addRoute(map, PAST_ROUTE, path, colors.route, 3.5, [2, 2]);
     if (destination && path.length > 0) {
@@ -111,7 +92,12 @@ function drawRoutes(
   }
 }
 
-export default function TrackingMap({ events, destination, status, activeIndex = null, onSelectEvent }: TrackingMapProps) {
+/**
+ * Carte interactive (mapbox-gl, ~450 Ko). Elle n'est chargée qu'à la demande, par-dessus l'aperçu
+ * statique (voir MapPanel) : tant que son style n'est pas prêt, son canevas transparent laisse voir
+ * l'aperçu, qu'elle recouvre ensuite à l'identique.
+ */
+export default function TrackingMap({ token, events, destination, initialView, activeIndex, onSelectEvent }: TrackingMapProps) {
   const { locale, t } = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -120,42 +106,38 @@ export default function TrackingMap({ events, destination, status, activeIndex =
   const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const isLoadedRef = useRef(false);
   const isOpeningPopupRef = useRef(false);
-  const onSelectRef = useRef(onSelectEvent);
-
-  // Sur téléphone la carte ne fait que 340 px de haut : la légende y est repliée derrière un bouton
-  const [isLegendOpen, setIsLegendOpen] = useState(false);
-  const legendId = useId();
-
-  const isFinished = status === "Delivered" || status === "Returned";
-  const showDestination = !!destination && !isFinished;
 
   const { theme } = useTheme();
-  // Lus dans l'effet d'initialisation de la carte (qui ne s'exécute qu'une fois) via des refs, pour
-  // ne jamais y dépendre : locale/t peuvent changer sans que la carte ait besoin d'être recréée.
+  // Lus dans les effets qui ne s'exécutent qu'une fois (création de la carte, rechargement du style) via
+  // des refs, pour ne jamais en dépendre : la carte n'a pas à être recréée quand ces valeurs changent.
+  const onSelectRef = useRef(onSelectEvent);
   const localeRef = useRef<Locale>(locale);
   const tRef = useRef<Dictionary>(t);
+  const activeIndexRef = useRef(activeIndex);
+  const initialViewRef = useRef(initialView);
   // Thème dont le style est appliqué à la carte (peut retarder sur `theme` le temps d'un changement)
   const appliedThemeRef = useRef<Theme>(theme);
-  // Dernières données, lues par le rechargement du style pour redessiner le tracé
-  const latestRef = useRef({ events, destination: showDestination ? destination : undefined });
+  const latestRef = useRef({ events, destination });
 
   useEffect(() => {
     onSelectRef.current = onSelectEvent;
-    latestRef.current = { events, destination: showDestination ? destination : undefined };
+    latestRef.current = { events, destination };
     localeRef.current = locale;
     tRef.current = t;
+    activeIndexRef.current = activeIndex;
   });
 
-  // Initialisation de la carte
+  // Création de la carte, directement sur la vue du trajet : pas de survol animé depuis une vue par
+  // défaut, donc aucune tuile téléchargée pour rien
   useEffect(() => {
-    if (!containerRef.current || !MAPBOX_TOKEN) return;
+    if (!containerRef.current) return;
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    mapboxgl.accessToken = token;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: MAP_THEMES[appliedThemeRef.current].style,
-      center: [2.3522, 48.8566],
-      zoom: 3,
+      style: styleUrl(appliedThemeRef.current),
+      center: initialViewRef.current.center,
+      zoom: initialViewRef.current.zoom,
     });
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
@@ -165,7 +147,7 @@ export default function TrackingMap({ events, destination, status, activeIndex =
     // Un seul popup, déplacé d'une étape à l'autre. Fermé (clic sur la carte), il désélectionne l'étape.
     const popup = new mapboxgl.Popup({ closeButton: false, offset: 16, className: "trk-popup", maxWidth: "280px" });
     popup.on("close", () => {
-      if (!isOpeningPopupRef.current) onSelectRef.current?.(null);
+      if (!isOpeningPopupRef.current) onSelectRef.current(null);
     });
 
     mapRef.current = map;
@@ -179,9 +161,9 @@ export default function TrackingMap({ events, destination, status, activeIndex =
       destinationMarkerRef.current = null;
       map.remove();
     };
-  }, []);
+  }, [token]);
 
-  // Tracé et marqueurs, à chaque changement de données
+  // Tracé et marqueurs
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -191,24 +173,20 @@ export default function TrackingMap({ events, destination, status, activeIndex =
       markersRef.current = new Map();
       destinationMarkerRef.current?.remove();
       destinationMarkerRef.current = null;
-      drawRoutes(map, events, showDestination ? destination : undefined, MAP_THEMES[appliedThemeRef.current]);
-
-      if (!events?.length) return;
-
-      const path = chronologicalPath(events);
+      drawRoutes(map, events, destination, MAP_THEMES[appliedThemeRef.current]);
 
       // Les événements sont triés du plus récent au plus ancien : le premier avec position est le dernier connu
       let isLatest = true;
       events.forEach((event, index) => {
         if (!event.coordinates) return;
 
-        const element = createMarker(isLatest ? "latest" : "past");
-        element.addEventListener("click", () => onSelectRef.current?.(index));
+        const element = createMarker(isLatest ? "latest" : "past", index === activeIndexRef.current);
+        element.addEventListener("click", () => onSelectRef.current(index));
         markersRef.current.set(index, new mapboxgl.Marker({ element }).setLngLat(event.coordinates).addTo(map));
         isLatest = false;
       });
 
-      if (showDestination) {
+      if (destination) {
         destinationMarkerRef.current = new mapboxgl.Marker({ element: createMarker("destination") })
           .setLngLat(destination.coordinates)
           .setPopup(
@@ -217,14 +195,6 @@ export default function TrackingMap({ events, destination, status, activeIndex =
             )
           )
           .addTo(map);
-      }
-
-      const points = showDestination ? [...path, destination.coordinates] : path;
-      if (points.length > 1) {
-        const bounds = points.reduce((b, point) => b.extend(point), new mapboxgl.LngLatBounds(points[0], points[0]));
-        map.fitBounds(bounds, { padding: 70, maxZoom: 10 });
-      } else if (points.length === 1) {
-        map.flyTo({ center: points[0], zoom: 8 });
       }
     };
 
@@ -236,7 +206,7 @@ export default function TrackingMap({ events, destination, status, activeIndex =
     return () => {
       map.off("load", draw);
     };
-  }, [events, destination, showDestination]);
+  }, [events, destination]);
 
   // Changement de thème : nouveau fond de carte, sans recréer la carte (le zoom, les marqueurs et le popup restent)
   useEffect(() => {
@@ -244,7 +214,7 @@ export default function TrackingMap({ events, destination, status, activeIndex =
     if (!map || appliedThemeRef.current === theme) return;
 
     appliedThemeRef.current = theme;
-    map.setStyle(MAP_THEMES[theme].style);
+    map.setStyle(styleUrl(theme));
 
     // setStyle efface les sources et layers : le tracé est redessiné dès que le nouveau style est chargé
     const redraw = () => drawRoutes(map, latestRef.current.events, latestRef.current.destination, MAP_THEMES[theme]);
@@ -266,7 +236,7 @@ export default function TrackingMap({ events, destination, status, activeIndex =
 
     isOpeningPopupRef.current = true;
     popup.remove();
-    const event = activeIndex === null ? undefined : events?.[activeIndex];
+    const event = activeIndex === null ? undefined : events[activeIndex];
     if (event?.coordinates) {
       popup
         .setLngLat(event.coordinates)
@@ -288,61 +258,10 @@ export default function TrackingMap({ events, destination, status, activeIndex =
     isOpeningPopupRef.current = false;
   }, [activeIndex, events, locale, t]);
 
-  if (!MAPBOX_TOKEN) {
-    return (
-      <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-ink-soft">
-        {t.map.tokenMissing}
-      </div>
-    );
-  }
-
-  // Certains transporteurs ne donnent que le pays : rien à tracer, on l'explique plutôt que d'afficher une carte vide
-  const hasPosition = !!events?.some((event) => event.coordinates);
-  const hasNoPosition = !!events?.length && !hasPosition;
-
+  // Deux niveaux : mapbox-gl impose position: relative à son conteneur, ce qui annulerait le placement par-dessus l'aperçu
   return (
-    <div className="relative h-full w-full">
+    <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full" />
-
-      {hasPosition ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setIsLegendOpen((open) => !open)}
-            aria-expanded={isLegendOpen}
-            aria-controls={legendId}
-            className="label absolute left-3 top-3 rounded border-2 border-ink bg-sheet px-3 py-2 sm:hidden"
-          >
-            {isLegendOpen ? t.map.hideLegend : t.map.showLegend}
-          </button>
-          <ul
-            id={legendId}
-            className={`label pointer-events-none absolute left-3 space-y-1.5 rounded border-2 border-ink bg-sheet px-3 py-2.5 sm:top-3 sm:block ${isLegendOpen ? "top-14" : "top-3 hidden"}`}
-          >
-            <li className="flex items-center gap-2.5">
-              <span aria-hidden="true" className="w-6 border-t-[3px] border-dashed border-customs" />
-              {t.map.legendPast}
-            </li>
-            {showDestination && (
-              <li className="flex items-center gap-2.5">
-                <span aria-hidden="true" className="w-6 border-t-[3px] border-dotted border-ink-soft" />
-                {t.map.legendRemaining}
-              </li>
-            )}
-            <li className="flex items-center gap-2.5">
-              <span aria-hidden="true" className="ml-1 size-3.5 rounded-full border-[3px] border-ink bg-signal" />
-              {t.map.legendLatest}
-            </li>
-          </ul>
-        </>
-      ) : null}
-
-      {hasNoPosition && (
-        <p className="absolute inset-x-3 bottom-8 mx-auto max-w-md rounded border-2 border-ink bg-sheet px-4 py-3 text-center text-[15px]">
-          <span className="label mb-1 block font-bold">{t.map.noPositionTitle}</span>
-          {t.map.noPositionText}
-        </p>
-      )}
     </div>
   );
 }

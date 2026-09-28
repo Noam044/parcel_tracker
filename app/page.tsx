@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
+import { Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import Banner from "@/components/Banner";
 import Guide from "@/components/Guide";
 import ParcelResults from "@/components/ParcelResults";
@@ -14,13 +14,14 @@ import TrackingForm from "@/components/TrackingForm";
 import { useHistory } from "@/lib/history";
 import { useT } from "@/lib/locale";
 import { normalizeTrackingNumber } from "@/lib/tracking-number";
+import { clearDeeplink, NUMBER_PARAM } from "@/lib/url-script";
 import { useParcelSearch } from "@/lib/use-parcel-search";
 
-// Le colis affiché vit dans l'URL (?n=…) : un suivi se recharge, se partage, se met en favori, et les
-// boutons Précédent/Suivant du navigateur passent d'un colis à l'autre ou reviennent à l'accueil.
-const NUMBER_PARAM = "n";
-
-/** Signale chaque changement du numéro dans l'URL, y compris au premier chargement. */
+/**
+ * Signale chaque changement du numéro dans l'URL, y compris au premier chargement. Le colis affiché vit
+ * dans l'URL (?n=…) : un suivi se recharge, se partage, se met en favori, et les boutons Précédent/Suivant
+ * du navigateur passent d'un colis à l'autre ou reviennent à l'accueil.
+ */
 function UrlNumber({ onChange }: { onChange: (number: string | null) => void }) {
   const number = useSearchParams().get(NUMBER_PARAM);
   const notify = useEffectEvent(onChange);
@@ -41,6 +42,7 @@ export default function Home() {
 
   const showNumber = (number: string | null) => {
     if (!number) {
+      clearDeeplink();
       setQuery("");
       reset();
       return;
@@ -78,6 +80,13 @@ export default function Home() {
     }
   };
 
+  // Lien direct (?n=…) : l'accueil était masqué avant le premier rendu (voir lib/url-script.ts). Dès que la
+  // recherche est lancée, ou qu'elle échoue d'emblée (numéro invalide), la page a pris le relais.
+  const hasBanner = !!banner;
+  useLayoutEffect(() => {
+    if (isCompact || hasBanner) clearDeeplink();
+  }, [isCompact, hasBanner]);
+
   useEffect(() => {
     if (isCompact || !focusFormRef.current) return;
     focusFormRef.current = false;
@@ -86,7 +95,6 @@ export default function Home() {
 
   // Un message (erreur, introuvable…) après un clic dans l'historique : le bouton cliqué a disparu
   // pendant la recherche, le focus est retombé sur la page. On le rend au champ, juste au-dessus du message.
-  const hasBanner = !!banner;
   useEffect(() => {
     if (hasBanner && document.activeElement === document.body) document.getElementById("tracking-number")?.focus();
   }, [hasBanner]);
@@ -106,7 +114,13 @@ export default function Home() {
       <SiteHeader onHome={goHome} />
 
       <main>
-        <section className={`mx-auto max-w-[1280px] px-5 md:px-10 ${isCompact ? "pb-0 pt-6 md:pt-8" : "pb-12 pt-10 md:pb-16 md:pt-16"}`}>
+        <section
+          className={`mx-auto max-w-[1280px] px-5 md:px-10 ${
+            isCompact
+              ? "pb-0 pt-6 md:pt-8"
+              : "pb-12 pt-10 deeplink:pb-0 deeplink:pt-6 md:pb-16 md:pt-16 md:deeplink:pt-8"
+          }`}
+        >
           {isCompact ? (
             <>
               <h1 className="sr-only">Parcel Tracker</h1>
@@ -121,29 +135,46 @@ export default function Home() {
               <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} compact />
             </>
           ) : (
-            <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16">
-              <div className="animate-fade-up">
-                <p className="label mb-5 text-ink-soft">{t.hero.eyebrow}</p>
-                <h1 className="font-wide text-[clamp(2.5rem,6vw,4.75rem)] font-extrabold leading-[0.96] tracking-[-0.02em]">
-                  {t.hero.title}
-                </h1>
-                <p className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-soft">{t.hero.subtitle}</p>
-                <div className="mt-10">
-                  <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} />
-                  {/* Juste sous le formulaire : sur téléphone, la colonne d'exemple passe dessous et masquerait le message */}
-                  {banner && <Banner tone={banner.tone}>{banner.text}</Banner>}
-                </div>
+            <>
+              {/* Lien direct, avant que la page ne prenne le relais : le cadre de la recherche plutôt que l'accueil */}
+              <div aria-hidden="true" className="hidden deeplink:block">
+                <p className="label mb-3 py-2 text-ink-soft">← {t.form.backHome}</p>
+                <p className="label mb-2 text-ink-soft">{t.form.numberLabel}</p>
+                <div className="h-[124px] w-full max-w-[680px] rounded border-2 border-ink bg-sheet sm:h-16" />
               </div>
-              {/* Sur téléphone, un visiteur qui revient cherche d'abord ses colis : l'exemple passe après l'historique */}
-              <Specimen className={hasHistory ? "hidden lg:block" : undefined} />
-            </div>
+              <div className="grid items-start gap-12 deeplink:hidden lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16">
+                <div className="animate-fade-up">
+                  <p className="label mb-5 text-ink-soft">{t.hero.eyebrow}</p>
+                  <h1 className="font-wide text-[clamp(2.5rem,6vw,4.75rem)] font-extrabold leading-[0.96] tracking-[-0.02em]">
+                    {t.hero.title}
+                  </h1>
+                  <p className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-soft">{t.hero.subtitle}</p>
+                  <div className="mt-10">
+                    <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} />
+                    {/* Juste sous le formulaire : sur téléphone, la colonne d'exemple passe dessous et masquerait le message */}
+                    {banner && <Banner tone={banner.tone}>{banner.text}</Banner>}
+                  </div>
+                </div>
+                {/* Sur téléphone, un visiteur qui revient cherche d'abord ses colis : l'exemple passe après l'historique */}
+                <Specimen className={hasHistory ? "hidden lg:block" : undefined} />
+              </div>
+            </>
           )}
         </section>
 
-        {!isCompact && <RecentParcels onSelect={handleSearch} />}
-        {!isCompact && hasHistory && (
-          <div className="mx-auto max-w-[1280px] px-5 pb-14 md:px-10 lg:hidden">
-            <Specimen />
+        {!isCompact && (
+          <div className="deeplink:hidden">
+            <RecentParcels onSelect={handleSearch} />
+            {hasHistory && (
+              <div className="mx-auto max-w-[1280px] px-5 pb-14 md:px-10 lg:hidden">
+                <Specimen />
+              </div>
+            )}
+          </div>
+        )}
+        {!isCompact && (
+          <div className="hidden deeplink:block">
+            <SearchProgress isWaiting={false} onCancel={goHome} />
           </div>
         )}
         {isLoading && <SearchProgress isWaiting={isWaiting} onCancel={goHome} />}

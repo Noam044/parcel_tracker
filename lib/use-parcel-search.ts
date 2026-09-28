@@ -72,7 +72,7 @@ export function useParcelSearch() {
 
     setState({ ...INITIAL_STATE, isLoading: true });
     try {
-      const data = await trackParcel(trackingNumber, locale, {
+      const data = await trackParcel(trackingNumber, {
         signal: controller.signal,
         onPending: () => setState((current) => ({ ...current, isWaiting: true })),
       });

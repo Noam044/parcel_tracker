@@ -1,11 +1,11 @@
 import type { Dictionary } from './dictionary';
 import { apiErrorText } from './display';
-import type { Locale } from './locale-script';
-import type { ApiError, ApiErrorCode, ApiPending, TrackingData } from './types';
+import { CLIENT_HEADER, type ApiError, type ApiErrorCode, type ApiPending, type TrackingData } from './types';
 
-// Un numéro tout juste enregistré peut mettre un moment à recevoir ses premières données
-const POLL_INTERVAL_MS = 5_000;
-const MAX_POLLS = 12;
+// Un numéro tout juste enregistré peut mettre un moment à recevoir ses premières données. Les données
+// arrivent souvent dans les premières secondes, parfois bien plus tard : des relances rapprochées au début
+// puis espacées couvrent la même minute qu'une relance toutes les 5 s, avec 8 requêtes au lieu de 13.
+const POLL_DELAYS_MS = [4_000, 4_000, 6_000, 8_000, 10_000, 12_000, 16_000];
 
 /**
  * Échec d'une recherche. Le message n'est rédigé qu'à l'affichage (describe), dans la langue du moment :
@@ -38,13 +38,11 @@ function isTrackingData(payload: unknown): payload is TrackingData {
 }
 
 /** Une seule requête : les données de suivi, ou null si le colis n'a pas encore de données. */
-async function requestTracking(trackingNumber: string, locale: Locale, signal?: AbortSignal): Promise<TrackingData | null> {
-  const response = await fetch('/api/track', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // La langue voyage avec la requête : la route API l'utilise pour ses propres messages d'erreur
-    // (numéro invalide, rejet 17TRACK…). Les données de suivi elles-mêmes restent neutres (voir lib/tracking.ts).
-    body: JSON.stringify({ trackingNumber, locale }),
+async function requestTracking(trackingNumber: string, signal?: AbortSignal): Promise<TrackingData | null> {
+  // Numéro dans le chemin : un suivi prêt peut être servi par le CDN (voir app/api/track/[number]/route.ts).
+  // Les messages d'erreur sont rédigés ici, dans la langue affichée, à partir du code renvoyé.
+  const response = await fetch(`/api/track/${encodeURIComponent(trackingNumber)}`, {
+    headers: { [CLIENT_HEADER]: '1' },
     signal,
   });
 
@@ -78,8 +76,6 @@ interface TrackOptions {
   signal?: AbortSignal;
   /** Appelé quand le colis n'a pas encore de données et que la recherche continue */
   onPending?: () => void;
-  pollIntervalMs?: number;
-  maxPolls?: number;
 }
 
 /**
@@ -88,16 +84,15 @@ interface TrackOptions {
  */
 export async function trackParcel(
   trackingNumber: string,
-  locale: Locale,
-  { signal, onPending, pollIntervalMs = POLL_INTERVAL_MS, maxPolls = MAX_POLLS }: TrackOptions = {}
+  { signal, onPending }: TrackOptions = {}
 ): Promise<TrackingData | null> {
-  for (let poll = 0; poll <= maxPolls; poll++) {
-    const data = await requestTracking(trackingNumber, locale, signal);
+  for (let poll = 0; poll <= POLL_DELAYS_MS.length; poll++) {
+    const data = await requestTracking(trackingNumber, signal);
     if (data) return data;
 
-    if (poll < maxPolls) {
+    if (poll < POLL_DELAYS_MS.length) {
       onPending?.();
-      await wait(pollIntervalMs, signal);
+      await wait(POLL_DELAYS_MS[poll], signal);
     }
   }
   return null;

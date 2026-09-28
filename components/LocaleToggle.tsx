@@ -10,6 +10,8 @@ import { useT } from "@/lib/locale";
  *
  * Pour un lecteur d'écran, ce n'est pas un interrupteur (« Langue, activé » ne dit pas laquelle) mais un
  * bouton qui annonce la langue d'arrivée, rédigé et prononcé dans cette langue : « Switch to English ».
+ * Ce nom est un texte masqué plutôt qu'un aria-label : un aria-label doit reprendre le texte visible
+ * (« FR EN »), sans quoi la commande vocale et les audits d'accessibilité le signalent.
  */
 export default function LocaleToggle() {
   const { locale, setLocale, t } = useT();
@@ -18,13 +20,13 @@ export default function LocaleToggle() {
   return (
     <button
       type="button"
-      aria-label={t.header.switchLanguage}
       title={t.header.switchLanguage}
       lang={isEnglish ? "fr" : "en"}
       onClick={() => setLocale(isEnglish ? "fr" : "en")}
       // py-2.5 agrandit la zone tactile (28 px de curseur → 48 px) sans changer l'apparence
       className="flex items-center gap-2.5 py-2.5"
     >
+      <span className="sr-only">{t.header.switchLanguage}</span>
       <span className="relative flex h-7 w-14 shrink-0 items-center rounded border-2 border-ink bg-sheet font-mono text-[10px] font-bold">
         <span aria-hidden="true" className="flex-1 text-center text-ink-soft">
           FR

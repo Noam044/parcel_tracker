@@ -30,14 +30,14 @@ L'application est disponible sur [http://localhost:3000](http://localhost:3000).
 ## Protection des quotas
 
 Chaque numéro que 17TRACK ne connaît pas encore est enregistré (`register`), ce qui coûte une unité de
-quota ; consulter un numéro déjà enregistré (`gettrackinfo`) est gratuit. La route `/api/track` limite donc :
+quota ; consulter un numéro déjà enregistré (`gettrackinfo`) est gratuit. La route `GET /api/track/{numéro}` limite donc :
 
 - **les nouveaux enregistrements** : avant chacun, le quota est vérifié auprès de 17TRACK (`getquota`) et
   l'enregistrement est refusé si la limite du jour ou la réserve est atteinte (en cas de doute, il est refusé) ;
 - **le débit par IP** : 30 requêtes par minute et 3 enregistrements par heure (en mémoire, par instance) ;
-- **les appels répétés** : un suivi est gardé 3 minutes en cache et les recherches simultanées d'un même
-  numéro partagent le même appel ;
-- **les requêtes d'autres sites** : refusées (en-têtes `Sec-Fetch-Site`/`Origin`, JSON obligatoire, corps ≤ 1 Ko).
+- **les appels répétés** : un suivi prêt est gardé 3 minutes par le CDN de Netlify (sans réveiller la fonction
+  serveur) et en mémoire, et les recherches simultanées d'un même numéro partagent le même appel ;
+- **les requêtes d'autres sites** : refusées (en-tête `x-parcel-tracker` exigé, `Sec-Fetch-Site`/`Origin` vérifiés).
 
 Deux réglages à faire hors du code :
 
@@ -60,13 +60,14 @@ Deux réglages à faire hors du code :
 
 ```
 app/
-  api/track/route.ts   Route POST /api/track (validation + orchestration)
+  api/track/[number]/  Route GET /api/track/{numéro} (validation, protections, cache, orchestration)
   page.tsx             Page d'accueil
 components/            Formulaire, résumé, timeline, carte
 lib/
   track17.ts           Client 17TRACK, fusion des événements, statuts
   quota.ts             Garde-fou du quota 17TRACK avant chaque enregistrement
   rate-limit.ts        Limiteur de débit par IP
+  map-view.ts          Cadrage partagé par l'aperçu statique et la carte interactive
   tracking.ts          Transformation des données 17TRACK → données de l'interface
   locations.ts         Résolution des lieux (UN/LOCODE, codes postaux, villes)
   geocode.ts           Géocodage Mapbox parallélisé avec cache

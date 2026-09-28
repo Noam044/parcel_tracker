@@ -6,6 +6,9 @@
 /* L'anglais s'active avec l'attribut data-lang="en" posé sur <html> (voir lib/locale.ts) */
 @custom-variant lang-en (&:where([data-lang="en"], [data-lang="en"] *));
 
+/* Lien direct vers un colis (?n=…) avant que la page ne prenne le relais (voir lib/url-script.ts) */
+@custom-variant deeplink (&:where([data-deeplink], [data-deeplink] *));
+
 /*
  * Palette tirée des objets du colis : papier d'étiquette, encre d'imprimante thermique,
  * vert du sticker douane CN22, orange des étiquettes de coursier.

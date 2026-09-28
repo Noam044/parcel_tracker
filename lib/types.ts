@@ -34,6 +34,13 @@ export interface TrackingData {
   destination?: Destination;
 }
 
+/**
+ * En-tête exigé par /api/track de nos propres appels (valeur « 1 »). Un site tiers ne peut pas l'ajouter à
+ * une requête sans demande préalable CORS, à laquelle la route ne répond pas : ni fetch, ni <img>, ni
+ * formulaire ne peuvent donc déclencher d'enregistrement (et consommer du quota) depuis une autre origine.
+ */
+export const CLIENT_HEADER = 'x-parcel-tracker';
+
 export type ApiErrorCode =
   | 'invalid_number'
   | 'forbidden'

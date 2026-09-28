@@ -7,7 +7,9 @@ export default function SearchProgress({ isWaiting, onCancel }: { isWaiting: boo
   const { t } = useT();
 
   return (
-    <section className="mx-auto max-w-[1280px] px-5 py-10 md:px-10 md:py-14">
+    // Au moins un écran de haut : ce qui suit (guide, pied de page) reste sous la ligne de flottaison et ne
+    // « saute » pas à l'écran quand le résultat, bien plus long, remplace ce cadre
+    <section className="mx-auto min-h-dvh max-w-[1280px] px-5 py-10 md:px-10 md:py-14">
       <div role="status" aria-live="polite" className="label-card animate-fade-up p-6 md:p-10">
         <div className="relative h-[14px]">
           <div
