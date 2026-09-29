@@ -14,7 +14,7 @@ export interface S10Number {
 
 /**
  * Décompose un numéro postal international au format S10 (UPU), null pour tout autre format.
- * Les deux dernières lettres doivent être un vrai code pays : « XW570275354TS » (Chronopost) a la même forme
+ * Les deux dernières lettres doivent être un vrai code pays : « XW123456789TS » (Chronopost) a la même forme
  * mais « TS » n'est pas un pays, ce n'est donc pas un numéro S10.
  */
 export function parseS10(trackingNumber: string): S10Number | null {

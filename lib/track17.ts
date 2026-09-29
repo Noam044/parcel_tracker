@@ -72,7 +72,7 @@ const OUT_OF_QUOTA = new Set([-18019907, -18019908]);
  * charge. On le lui désigne explicitement avec sa clé numérique (liste : res.17track.net/asset/carrier/info/apicarrier.all.json).
  */
 const CARRIER_HINTS: { pattern: RegExp; carrier: number; name: string }[] = [
-  // Chronopost / Shop2Shop, ex. XW570275354TS : « TS » n'est pas un code pays, 17TRACK ne le reconnaît pas
+  // Chronopost / Shop2Shop, ex. XW123456789TS : « TS » n'est pas un code pays, 17TRACK ne le reconnaît pas
   { pattern: /^[A-Z]{2}\d{9}TS$/i, carrier: 100273, name: 'Chronopost' },
 ];
 
