@@ -197,7 +197,7 @@ The vocabulary of a shipping label: label paper and thermal-printer ink, the gre
 
 ## Credits
 
-Tracking data by [17TRACK](https://www.17track.net). Maps © [Mapbox](https://www.mapbox.com/about/maps/) © [OpenStreetMap](https://www.openstreetmap.org/copyright). Not affiliated with 17TRACK, Mapbox or any carrier. The parcel in the screenshots is fictitious.
+Tracking data by [17TRACK](https://www.17track.net). Maps © [Mapbox](https://www.mapbox.com/about/maps/) © [OpenStreetMap](https://www.openstreetmap.org/copyright). Not affiliated with 17TRACK, Mapbox or any carrier. The parcel shown in the video and screenshot is fictitious.
 
 ## License
 
