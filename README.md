@@ -8,7 +8,7 @@ Parcel tracking for **any carrier, without an account**: the carrier is detected
 
 ### [→ Try it now](https://noam-s-parcel-tracker.netlify.app)
 
-<img src="docs/screenshot-desktop.png" alt="Parcel Tracker: a parcel from Shenzhen to Lyon, with its status, key figures, history and route on a map" width="860">
+https://github.com/user-attachments/assets/b1482703-ffea-4d9c-bf2f-c21f901ec173
 
 <br>
 
