@@ -55,7 +55,7 @@ A parcel from abroad changes hands three or four times, and every carrier has it
 
 ## Getting started
 
-Requirements: Node.js ≥ 20.9, a [17TRACK API key](https://api.17track.net) (the free plan includes 200 tracking numbers) and a [Mapbox access token](https://account.mapbox.com/access-tokens/).
+Requirements: Node.js ≥ 22.12, a [17TRACK API key](https://api.17track.net) (the free plan includes 200 tracking numbers) and a [Mapbox access token](https://account.mapbox.com/access-tokens/).
 
 ```bash
 npm install
@@ -63,7 +63,12 @@ cp .env.example .env.local   # then fill in the variables (see below)
 npm run dev                  # http://localhost:3000
 ```
 
-Production build: `npm run build && npm start`. Checks: `npm run lint` and `npm run typecheck`.
+Production build: `npm run build && npm start`. Checks: `npm run lint`, `npm run typecheck` and `npm test`. GitHub Actions runs all of them, plus a production build, on every push to `main` and every pull request.
+
+Tests use [Vitest](https://vitest.dev) and never call 17TRACK or Mapbox (`fetch` is mocked):
+
+- `tests/`: the tracking number rules, rate limiter, quota guard, 17TRACK client, place resolution, journey figures and the `/api/track` route (403/400/429, cache, registration, quota);
+- `evals/track17/`: reference cases, each a synthetic 17TRACK response (`*.input.json`) and the page data it must produce (`*.expected.json`). To add one, write the input, run `UPDATE_EVALS=1 npm test -- evals` and review the generated file before committing it.
 
 If your Mapbox token is restricted to some URLs, add `http://localhost:3000` to them: the port is part of the check.
 
@@ -144,7 +149,12 @@ lib/
 ├── journey.ts                   S10 parsing, distance, duration, day grouping
 ├── dictionary.ts                Every text, in French and English
 └── api.ts, use-parcel-search.ts Browser-side client, polling and search state
+tests/                           Vitest unit tests (lib/ and the API route)
+evals/track17/                   Reference 17TRACK responses → expected page data
+docs/adr/                        Architecture decision records
 ```
+
+The reasons behind the main choices (quota guard, CDN caching, two Mapbox tokens, language-neutral data, deploying from a `production` branch) are in the [architecture decision records](docs/adr/README.md).
 
 ### Protecting the free 17TRACK quota
 
@@ -163,6 +173,8 @@ Looking up a number is free, but **registering** a new one costs one quota unit,
 - **No leaks in errors**: 17TRACK's raw messages (which can describe the account) are logged, never returned. Every error has a code the browser turns into a message.
 - **Only ready responses are cached**: pending responses and errors are `no-store`.
 - **Carrier text is inserted as text**, never as HTML, including in map popups.
+
+Found a vulnerability? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
 ### Performance
 
