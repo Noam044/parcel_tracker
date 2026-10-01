@@ -1,0 +1,13 @@
+{
+  "trackingNumber": "1Z999AA10123456784",
+  "carrier": "UPS",
+  "status": "Pending",
+  "estimatedDelivery": "2026-09-17T00:00:00Z",
+  "events": [
+    {
+      "date": "2026-09-11T16:20:00-04:00",
+      "location": "USJFK",
+      "description": "Label created"
+    }
+  ]
+}

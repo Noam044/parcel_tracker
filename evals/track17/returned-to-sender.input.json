@@ -1,0 +1,22 @@
+{
+  "description": "Colis retourné à l'expéditeur : 17TRACK le classe en Exception, l'application en « Returned », sans destination ni arrivée estimée.",
+  "trackingNumber": "RR987654321DE",
+  "trackInfo": {
+    "latest_status": { "status": "Exception", "sub_status": "Exception_Returned" },
+    "shipping_info": {
+      "shipper_address": { "country": "DE" },
+      "recipient_address": { "country": "FR", "city": "Nantes" }
+    },
+    "tracking": {
+      "providers": [
+        {
+          "provider": { "name": "Deutsche Post", "country": "DE" },
+          "events": [
+            { "time_iso": "2026-09-12T10:00:00+02:00", "description": "Retour à l'expéditeur", "location": "Leipzig", "address": { "country": "DE" } },
+            { "time_iso": "2026-09-03T10:00:00+02:00", "description": "Envoi déposé", "location": "Leipzig", "address": { "country": "DE" } }
+          ]
+        }
+      ]
+    }
+  }
+}

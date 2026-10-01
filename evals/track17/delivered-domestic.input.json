@@ -1,0 +1,32 @@
+{
+  "description": "Colis livré en France : ni destination ni arrivée estimée (trajet terminé), événement au format Chronopost « LIEU, message ».",
+  "trackingNumber": "XW123456789TS",
+  "trackInfo": {
+    "latest_status": { "status": "Delivered", "estimated_delivery_date": "2026-09-10T00:00:00Z" },
+    "shipping_info": {
+      "shipper_address": { "country": "FR" },
+      "recipient_address": { "country": "FR", "city": "Paris", "coordinates": { "longitude": 2.3522, "latitude": 48.8566 } }
+    },
+    "tracking": {
+      "providers": [
+        {
+          "provider": { "name": "Chronopost", "country": "FR" },
+          "events": [
+            {
+              "time_utc": "2026-09-09T14:02:00Z",
+              "description": "PARIS 15, Colis livré",
+              "location": "PARIS 15, Colis livré",
+              "address": { "country": "FR" }
+            },
+            {
+              "time_utc": "2026-09-08T19:40:00Z",
+              "description": "CHILLY MAZARIN, Colis en cours d'acheminement",
+              "location": "CHILLY MAZARIN, Colis en cours d'acheminement",
+              "address": { "country": "FR" }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

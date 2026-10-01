@@ -1,4 +1,4 @@
-# Vérifie chaque push sur main et chaque pull request : lint, types et build de production.
+# Vérifie chaque push sur main et chaque pull request : lint, types, tests et build de production.
 # Le déploiement reste géré par Netlify (netlify.toml) ; ce workflow sert de garde-fou avant fusion.
 # Aucun secret n'est nécessaire : les clés 17TRACK et Mapbox ne sont lues qu'à l'exécution.
 name: CI
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, types et build
+    name: Lint, types, tests et build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -37,6 +37,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Tests
+        run: npm test
 
       - name: Build
         run: npm run build

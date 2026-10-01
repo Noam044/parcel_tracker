@@ -1,0 +1,22 @@
+{
+  "description": "Colis pris en charge, date estimée fournie par le transporteur (plage : on garde la fin), destination sans coordonnées ni géocodage possible (aucun token Mapbox) : pas de repère.",
+  "trackingNumber": "1Z999AA10123456784",
+  "trackInfo": {
+    "latest_status": { "status": "InfoReceived" },
+    "time_metrics": { "estimated_delivery_date": { "from": "2026-09-15T00:00:00Z", "to": "2026-09-17T00:00:00Z" } },
+    "shipping_info": {
+      "shipper_address": { "country": "US" },
+      "recipient_address": { "country": "FR", "city": "Bordeaux" }
+    },
+    "tracking": {
+      "providers": [
+        {
+          "provider": { "name": "UPS", "country": "US" },
+          "events": [
+            { "time_iso": "2026-09-11T16:20:00-04:00", "description": "Label created", "location": "USJFK", "address": { "country": "US" } }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "trackingNumber": "RR987654321DE",
+  "carrier": "Deutsche Post",
+  "status": "Returned",
+  "events": [
+    {
+      "date": "2026-09-12T10:00:00+02:00",
+      "location": "Leipzig",
+      "description": "Retour à l'expéditeur"
+    },
+    {
+      "date": "2026-09-03T10:00:00+02:00",
+      "location": "Leipzig",
+      "description": "Envoi déposé"
+    }
+  ]
+}

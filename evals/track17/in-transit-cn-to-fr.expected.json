@@ -1,0 +1,46 @@
+{
+  "trackingNumber": "LP123456789CN",
+  "carrier": "China Post",
+  "status": "In Transit",
+  "estimatedDelivery": "2026-09-13T01:00:00.000Z",
+  "estimatedDeliveryApproximate": true,
+  "events": [
+    {
+      "date": "2026-09-06T08:15:00+02:00",
+      "location": "",
+      "locationCountryCode": "FR",
+      "description": "Votre colis est en cours d'acheminement"
+    },
+    {
+      "date": "2026-09-05T06:30:00+02:00",
+      "location": "Roissy-en-France",
+      "description": "Arrivée en France",
+      "coordinates": [
+        2.5479,
+        49.0097
+      ]
+    },
+    {
+      "date": "2026-09-02T22:10:00+08:00",
+      "location": "Guangzhou",
+      "description": "Départ de l'aéroport",
+      "coordinates": [
+        113.2644,
+        23.1291
+      ]
+    },
+    {
+      "date": "2026-09-01T09:00:00+08:00",
+      "location": "518000",
+      "description": "Prise en charge"
+    }
+  ],
+  "destination": {
+    "city": "Lyon",
+    "countryCode": "FR",
+    "coordinates": [
+      4.8357,
+      45.764
+    ]
+  }
+}

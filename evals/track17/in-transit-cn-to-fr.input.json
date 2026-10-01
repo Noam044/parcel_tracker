@@ -1,0 +1,59 @@
+{
+  "description": "Colis Chine → France encore en route : deux transporteurs, un scan en double, position (0,0) ignorée, arrivée estimée faute de date du transporteur (délai international).",
+  "trackingNumber": "LP123456789CN",
+  "trackInfo": {
+    "latest_status": { "status": "InTransit", "sub_status": "InTransit_Other" },
+    "shipping_info": {
+      "shipper_address": { "country": "CN", "city": null },
+      "recipient_address": {
+        "country": "FR",
+        "city": "Lyon",
+        "coordinates": { "longitude": 4.8357, "latitude": 45.764 }
+      }
+    },
+    "tracking": {
+      "providers": [
+        {
+          "provider": { "name": "China Post", "country": "CN" },
+          "events": [
+            {
+              "time_iso": "2026-09-05T06:30:00+02:00",
+              "description": "Arrivée dans le pays de destination",
+              "location": "",
+              "address": { "country": "FR", "city": null }
+            },
+            {
+              "time_iso": "2026-09-02T22:10:00+08:00",
+              "description": "Départ de l'aéroport",
+              "location": "CNCAN",
+              "address": { "country": "CN", "city": "Guangzhou", "coordinates": { "longitude": 113.2644, "latitude": 23.1291 } }
+            },
+            {
+              "time_iso": "2026-09-01T09:00:00+08:00",
+              "description": "Prise en charge",
+              "location": "518000",
+              "address": { "country": "CN", "coordinates": { "longitude": 0, "latitude": 0 } }
+            }
+          ]
+        },
+        {
+          "provider": { "name": "La Poste", "country": "FR" },
+          "events": [
+            {
+              "time_iso": "2026-09-06T08:15:00+02:00",
+              "description": "Votre colis est en cours d'acheminement",
+              "location": "FR",
+              "address": { "country": "FR" }
+            },
+            {
+              "time_iso": "2026-09-05T06:30:00+02:00",
+              "description": "Arrivée en France",
+              "location": "Roissy",
+              "address": { "country": "FR", "city": "Roissy-en-France", "coordinates": { "longitude": 2.5479, "latitude": 49.0097 } }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
