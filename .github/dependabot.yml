@@ -1,0 +1,35 @@
+# Mises à jour automatiques des dépendances : une PR groupée par semaine plutôt qu'une PR par paquet.
+# Chaque PR passe par la CI (lint, types, tests, build) avant d'être fusionnée à la main.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # Laisse une semaine à une version fraîchement publiée (et éventuellement compromise) avant de la proposer
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      # next et eslint-config-next sont figés sur la même version exacte : ils doivent monter ensemble
+      nextjs:
+        patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react", "@types/react-dom"]
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+    ignore:
+      # Les types Node suivent la version de Node utilisée en CI et sur Netlify (22), pas la dernière
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
