@@ -128,6 +128,11 @@ export interface Dictionary {
     refresh: string;
     removeAria: (number: string) => string;
   };
+  carriers: {
+    title: string;
+    subtitle: string;
+    trademarks: string;
+  };
   guide: {
     statusTitle: string;
     goodToKnowTitle: string;
@@ -278,6 +283,12 @@ const fr: Dictionary = {
     clear: "Effacer l'historique",
     refresh: 'Actualiser',
     removeAria: (number) => `Retirer ${number} de l'historique`,
+  },
+  carriers: {
+    title: 'Transporteurs pris en charge',
+    subtitle:
+      'Plus de 3 500 transporteurs sont reconnus, en France et dans le monde. En voici quelques-uns.',
+    trademarks: "Les logos sont des marques de leurs propriétaires respectifs. Parcel Tracker n'est affilié à aucun transporteur.",
   },
   guide: {
     statusTitle: 'Ce que signifient les statuts',
@@ -479,6 +490,11 @@ const en: Dictionary = {
     clear: 'Clear history',
     refresh: 'Refresh',
     removeAria: (number) => `Remove ${number} from history`,
+  },
+  carriers: {
+    title: 'Supported carriers',
+    subtitle: 'Over 3,500 carriers are recognised, in France and worldwide. Here are a few of them.',
+    trademarks: 'Logos are trademarks of their respective owners. Parcel Tracker is not affiliated with any carrier.',
   },
   guide: {
     statusTitle: 'What the statuses mean',

@@ -28,6 +28,8 @@
   --color-on-customs: #ffffff;
   --color-signal: #f0521e;
   --color-alert: #b3261e;
+  /* Étiquette claire sous les logos des transporteurs (voir components/CarrierMarquee.tsx) */
+  --color-sticker: #f8f9f6;
 }
 
 /* Polices : elles référencent des variables posées par next/font, donc « inline » */
@@ -55,12 +57,15 @@
   --color-customs-hover: #5ad9a2;
   --color-on-customs: #06150d;
   --color-alert: #ff7b6e;
+  /* Toujours claire (les logos sont prévus pour un fond clair), un peu ternie pour ne pas éblouir */
+  --color-sticker: #dfe3dc;
 }
 
 @theme {
   --animate-fade-up: fade-up 0.45s ease-out both;
   --animate-march: march 0.9s linear infinite;
   --animate-travel: travel 2.4s ease-in-out infinite alternate;
+  --animate-marquee: marquee 45s linear infinite;
 
   @keyframes fade-up {
     from {
@@ -77,6 +82,13 @@
   @keyframes march {
     to {
       background-position: 16px 0;
+    }
+  }
+
+  /* Bandeau des transporteurs : la liste, doublée, glisse d'une copie puis recommence sans à-coup */
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
     }
   }
 

@@ -39,6 +39,7 @@ A parcel from abroad changes hands three or four times, and every carrier has it
 - **Tracking number anatomy**: international postal numbers (UPU S10 standard) are split into service, serial and country of origin.
 - **New numbers too**: a number 17TRACK has never seen is registered on the fly, and the page keeps checking for about a minute while the first scans arrive.
 - **Shareable links**: every parcel has its own URL (`?n=…`), and the browser's back and forward buttons move between parcels.
+- **Supported carriers band**: above the footer, the logos of 17 major carriers scroll in a loop, each on its own little label. The band pauses on hover, shows a still grid when the user prefers reduced motion, and only downloads its logos when it comes near the screen.
 - **Recent parcels**, kept only in the browser (no account, no database).
 - **French and English**, **light and dark** themes, and every animation is disabled when the user prefers reduced motion.
 - **Accessible**: keyboard focus follows the search, results are announced to screen readers, and small controls get enlarged touch targets.
@@ -141,6 +142,7 @@ components/
 ├── ParcelHeader.tsx             Status, progress and key figures
 ├── TrackingForm.tsx             Number, optional carrier menu and postal code
 ├── TrackingTimeline.tsx         History grouped by day
+├── CarrierMarquee.tsx           Scrolling band of supported carriers' logos
 └── …                            Form, recent parcels, banners, guide, toggles
 lib/
 ├── track17.ts                   17TRACK client, event merging, statuses
@@ -151,9 +153,11 @@ lib/
 ├── locations.ts                 Place resolution (UN/LOCODE, postal codes, cleaned names)
 ├── geocode.ts                   Parallel Mapbox geocoding with cache
 ├── map-view.ts                  Framing shared by the static preview and the interactive map
+├── carrier-logos.ts             Logos of the carriers band, with balanced display sizes
 ├── journey.ts                   S10 parsing, distance, duration, day grouping
 ├── dictionary.ts                Every text, in French and English
 └── api.ts, use-parcel-search.ts Browser-side client, polling and search state
+public/carriers/                 Carrier logos (SVG, optimised with SVGO)
 tests/                           Vitest unit tests (lib/ and the API route)
 evals/track17/                   Reference 17TRACK responses → expected page data
 docs/adr/                        Architecture decision records
@@ -216,7 +220,9 @@ The vocabulary of a shipping label: label paper and thermal-printer ink, the gre
 
 ## Credits
 
-Tracking data by [17TRACK](https://www.17track.net). Maps © [Mapbox](https://www.mapbox.com/about/maps/) © [OpenStreetMap](https://www.openstreetmap.org/copyright). Not affiliated with 17TRACK, Mapbox or any carrier. The parcel shown in the video and screenshot is fictitious.
+Tracking data by [17TRACK](https://www.17track.net). Maps © [Mapbox](https://www.mapbox.com/about/maps/) © [OpenStreetMap](https://www.openstreetmap.org/copyright).
+
+Carrier logos are trademarks of their respective owners, shown only to name the carriers the site can track. They come from [Wikimedia Commons](https://commons.wikimedia.org) (public domain), except the [Mondial Relay logo](https://commons.wikimedia.org/wiki/File:Mondial_Relay_by_InPost_logo-03.svg) (CC BY 4.0, uploaded by Mondial Relay) and the [Colis Privé logo](https://commons.wikimedia.org/wiki/File:Colis_Priv%C3%A9.svg) (CC BY-SA 4.0, uploaded by Colis Privé Group), and from the official websites for Colissimo and Vinted Go (the white Vinted Go logo is recoloured in its brand colour to show on a light background). The FedEx logo is cropped to the wordmark. Not affiliated with 17TRACK, Mapbox or any carrier. The parcel shown in the video and screenshot is fictitious.
 
 ## License
 

@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import Banner from "@/components/Banner";
+import CarrierMarquee from "@/components/CarrierMarquee";
 import Guide from "@/components/Guide";
 import ParcelResults from "@/components/ParcelResults";
 import RecentParcels from "@/components/RecentParcels";
@@ -199,6 +200,9 @@ export default function Home() {
 
         <div className="border-t-2 border-dashed border-ink">
           <Guide />
+        </div>
+        <div className="border-t-2 border-dashed border-ink">
+          <CarrierMarquee />
         </div>
       </main>
 
