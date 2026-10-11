@@ -1,3 +1,5 @@
+import type { CarrierId } from './tracking-number';
+
 /** [longitude, latitude] */
 export type Coordinates = [number, number];
 
@@ -43,6 +45,7 @@ export const CLIENT_HEADER = 'x-parcel-tracker';
 
 export type ApiErrorCode =
   | 'invalid_number'
+  | 'postal_code_required'
   | 'forbidden'
   | 'rate_limited'
   | 'registrations_paused'
@@ -61,6 +64,8 @@ export interface ApiError {
   code?: ApiErrorCode;
   /** Précision numérique : statut HTTP de 17TRACK (upstream_http) ou code de rejet (rejected) */
   detail?: number;
+  /** postal_code_required : transporteur reconnu, à rappeler avec le code postal ; absent s'il est inconnu */
+  carrier?: CarrierId;
 }
 
 /** Le numéro est connu de 17TRACK mais n'a pas encore de données de suivi. */

@@ -3,7 +3,7 @@
 import { useT } from "@/lib/locale";
 
 interface BannerProps {
-  tone: "error" | "notice" | "limit";
+  tone: "error" | "notice" | "limit" | "postal";
   children: React.ReactNode;
 }
 
@@ -11,13 +11,19 @@ const TONE_STYLES = {
   error: { border: "border-l-alert", text: "text-alert", role: "alert" as const },
   notice: { border: "border-l-signal", text: "text-ink", role: "status" as const },
   limit: { border: "border-l-signal", text: "text-ink", role: "status" as const },
+  postal: { border: "border-l-signal", text: "text-ink", role: "status" as const },
 };
 
 /** Message court sous le formulaire : une étiquette qualifie le message, la couleur de la marge le confirme. */
 export default function Banner({ tone, children }: BannerProps) {
   const { border, text, role } = TONE_STYLES[tone];
   const { t } = useT();
-  const tag = { error: t.banner.errorTag, notice: t.banner.noticeTag, limit: t.banner.limitTag }[tone];
+  const tag = {
+    error: t.banner.errorTag,
+    notice: t.banner.noticeTag,
+    limit: t.banner.limitTag,
+    postal: t.postalCode.tag,
+  }[tone];
 
   return (
     <div

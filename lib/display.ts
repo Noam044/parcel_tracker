@@ -43,6 +43,8 @@ export function apiErrorText(code: ApiErrorCode, detail: number | undefined, t: 
   switch (code) {
     case 'invalid_number':
       return errors.invalidNumber;
+    case 'postal_code_required':
+      return t.postalCode.intro(undefined);
     case 'forbidden':
       return errors.forbidden;
     case 'rate_limited':

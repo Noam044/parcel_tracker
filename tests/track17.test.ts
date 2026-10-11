@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   carrierHint,
+  changeCarrier,
+  guessCarrier,
   extractEstimatedDelivery,
   getTrackInfo,
   mapStatus,
@@ -64,6 +66,16 @@ describe('carrierHint', () => {
   });
 });
 
+describe('guessCarrier', () => {
+  it('reconnaît un numéro d’expédition Mondial Relay (8 chiffres)', () => {
+    expect(guessCarrier('12345678')).toBe('mondial-relay');
+  });
+
+  it.each(['1234567', '123456789', 'AB345678', 'LP123456789CN'])('ne devine rien pour %s', (number) => {
+    expect(guessCarrier(number)).toBeUndefined();
+  });
+});
+
 describe('mergeEvents', () => {
   it('fusionne les transporteurs du plus récent au plus ancien et ignore les dates invalides', () => {
     const merged = mergeEvents([
@@ -120,23 +132,38 @@ describe('getTrackInfo', () => {
     const info = { tracking: { providers: [] }, latest_status: { status: 'InTransit' } };
     mock17track({ gettrackinfo: [{ code: 0, data: { accepted: [{ track_info: info }], rejected: [] } }] });
 
-    await expect(getTrackInfo('key', 'LP123456789CN', 'fr')).resolves.toEqual({ status: 'ready', info });
+    await expect(getTrackInfo('key', { number: 'LP123456789CN' }, 'fr')).resolves.toEqual({ status: 'ready', info });
   });
 
   it('signale un numéro jamais enregistré', async () => {
     mock17track({ gettrackinfo: [NOT_REGISTERED_REPLY] });
-    await expect(getTrackInfo('key', 'LP123456789CN', 'fr')).resolves.toEqual({ status: 'unregistered' });
+    await expect(getTrackInfo('key', { number: 'LP123456789CN' }, 'fr')).resolves.toEqual({ status: 'unregistered' });
+  });
+
+  it('demande le transporteur désigné par le lien de suivi', async () => {
+    const fetchMock = mock17track({ gettrackinfo: [NOT_REGISTERED_REPLY] });
+    await getTrackInfo('key', { number: '12345678', carrier: 'mondial-relay', postalCode: '75001' }, 'fr');
+
+    // Le code postal ne sert qu'à l'enregistrement
+    expect(sentBody(fetchMock, 0)).toEqual([{ number: '12345678', carrier: 100304 }]);
+  });
+
+  it('signale un numéro enregistré sous un autre transporteur que celui demandé', async () => {
+    mock17track({ gettrackinfo: [{ code: 0, data: { accepted: [], rejected: [{ error: { code: -18019910 } }] } }] });
+    await expect(getTrackInfo('key', { number: '1234567890123456', carrier: 'vinted-go' }, 'fr')).resolves.toEqual({
+      status: 'other_carrier',
+    });
   });
 
   it('signale un numéro enregistré mais encore sans données', async () => {
     mock17track({ gettrackinfo: [{ code: 0, data: { accepted: [{ track_info: { tracking: null } }], rejected: [] } }] });
-    await expect(getTrackInfo('key', 'LP123456789CN', 'fr')).resolves.toEqual({ status: 'pending' });
+    await expect(getTrackInfo('key', { number: 'LP123456789CN' }, 'fr')).resolves.toEqual({ status: 'pending' });
   });
 
   it('transmet le code de refus de 17TRACK sans relayer son message', async () => {
     mock17track({ gettrackinfo: [{ code: 0, data: { rejected: [{ error: { code: -18019903, message: 'détails internes' } }] } }] });
 
-    const error = await getTrackInfo('key', 'LP123456789CN', 'fr').catch((e: unknown) => e);
+    const error = await getTrackInfo('key', { number: 'LP123456789CN' }, 'fr').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(UpstreamError);
     expect(error).toMatchObject({ code: 'rejected', status: 502, detail: -18019903 });
     expect((error as Error).message).not.toContain('détails internes');
@@ -149,13 +176,13 @@ describe('getTrackInfo', () => {
     ['réponse illisible', new Response('<html>', { status: 200 }), { code: 'upstream', status: 502 }],
   ])('convertit une %s en erreur typée', async (_, reply, expected) => {
     mock17track({ gettrackinfo: [reply] });
-    await expect(getTrackInfo('key', 'LP123456789CN', 'fr')).rejects.toMatchObject(expected);
+    await expect(getTrackInfo('key', { number: 'LP123456789CN' }, 'fr')).rejects.toMatchObject(expected);
   });
 
   it('convertit une panne réseau en erreur « network »', async () => {
     const fetchMock = mock17track({});
     fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
-    await expect(getTrackInfo('key', 'LP123456789CN', 'fr')).rejects.toMatchObject({ code: 'network', status: 502 });
+    await expect(getTrackInfo('key', { number: 'LP123456789CN' }, 'fr')).rejects.toMatchObject({ code: 'network', status: 502 });
   });
 });
 
@@ -164,7 +191,7 @@ describe('registerNumber', () => {
 
   it('désigne le transporteur quand le format du numéro est connu', async () => {
     const fetchMock = mock17track({ register: [{ code: 0, data: { accepted: [{}], rejected: [] } }] });
-    await registerNumber('key', 'XW123456789TS', 'fr');
+    await registerNumber('key', { number: 'XW123456789TS' }, 'fr');
 
     expect(sentBody(fetchMock, 0)).toEqual([{ number: 'XW123456789TS', carrier: 100273 }]);
     expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ '17token': 'key' });
@@ -172,18 +199,73 @@ describe('registerNumber', () => {
 
   it('n’envoie pas de transporteur sinon', async () => {
     const fetchMock = mock17track({ register: [{ code: 0, data: { accepted: [{}], rejected: [] } }] });
-    await registerNumber('key', 'LP123456789CN', 'fr');
+    await registerNumber('key', { number: 'LP123456789CN' }, 'fr');
 
     expect(sentBody(fetchMock, 0)).toEqual([{ number: 'LP123456789CN' }]);
   });
 
+  it('transmet le transporteur et le code postal d’un lien de suivi', async () => {
+    const fetchMock = mock17track({ register: [{ code: 0, data: { accepted: [{}], rejected: [] } }] });
+    await registerNumber('key', { number: '12345678', carrier: 'mondial-relay', postalCode: '75001' }, 'fr');
+
+    expect(sentBody(fetchMock, 0)).toEqual([{ number: '12345678', carrier: 100304, destination_postal_code: '75001' }]);
+  });
+
   it('accepte un numéro déjà enregistré (deux onglets sur le même colis)', async () => {
     mock17track({ register: [{ code: 0, data: { rejected: [{ error: { code: -18019901 } }] } }] });
-    await expect(registerNumber('key', 'LP123456789CN', 'fr')).resolves.toBeUndefined();
+    await expect(registerNumber('key', { number: 'LP123456789CN' }, 'fr')).resolves.toBeUndefined();
+  });
+
+  it('demande le code postal quand 17TRACK l’exige', async () => {
+    mock17track({ register: [{ code: 0, data: { rejected: [{ error: { code: -18010019 } }] } }] });
+    await expect(registerNumber('key', { number: 'AB123456789' }, 'fr')).rejects.toMatchObject({
+      code: 'postal_code_required',
+      status: 422,
+    });
+  });
+
+  it('signale un code postal refusé alors qu’il a été fourni', async () => {
+    mock17track({ register: [{ code: 0, data: { rejected: [{ error: { code: -18010019 } }] } }] });
+    await expect(registerNumber('key', { number: 'AB123456789', postalCode: '75001' }, 'fr')).rejects.toMatchObject({
+      code: 'rejected',
+      detail: -18010019,
+    });
   });
 
   it.each([-18019907, -18019908])('suspend les enregistrements quand le quota est épuisé (code %i)', async (code) => {
     mock17track({ register: [{ code: 0, data: { rejected: [{ error: { code } }] } }] });
-    await expect(registerNumber('key', 'LP123456789CN', 'fr')).rejects.toBeInstanceOf(RegistrationsPausedError);
+    await expect(registerNumber('key', { number: 'LP123456789CN' }, 'fr')).rejects.toBeInstanceOf(RegistrationsPausedError);
+  });
+});
+
+describe('changeCarrier', () => {
+  beforeEach(silenceConsole);
+
+  it('réattribue le numéro au transporteur du lien', async () => {
+    const fetchMock = mock17track({ changecarrier: [{ code: 0, data: { accepted: [{}], rejected: [] } }] });
+    await changeCarrier('key', { number: '1234567890123456', carrier: 'vinted-go' }, 'fr');
+
+    expect(sentBody(fetchMock, 0)).toEqual([{ number: '1234567890123456', carrier_new: 101020 }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('transmet ensuite le code postal exigé par le transporteur', async () => {
+    const fetchMock = mock17track({
+      changecarrier: [{ code: 0, data: { accepted: [{}], rejected: [] } }],
+      changeinfo: [{ code: 0, data: { accepted: [{}], rejected: [] } }],
+    });
+    await changeCarrier('key', { number: '12345678', carrier: 'mondial-relay', postalCode: '75001' }, 'fr');
+
+    expect(sentBody(fetchMock, 1)).toEqual([
+      { number: '12345678', carrier: 100304, items: { destination_postal_code: '75001' } },
+    ]);
+  });
+
+  it('signale un changement refusé (trop de changements pour ce numéro)', async () => {
+    mock17track({ changecarrier: [{ code: 0, data: { rejected: [{ error: { code: -18019807 } }] } }] });
+    await expect(changeCarrier('key', { number: '1234567890123456', carrier: 'vinted-go' }, 'fr')).rejects.toMatchObject({
+      code: 'rejected',
+      detail: -18019807,
+    });
   });
 });

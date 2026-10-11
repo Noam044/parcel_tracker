@@ -4,16 +4,29 @@ import { DICTIONARY } from '@/lib/dictionary';
 import { DEFAULT_LOCALE } from '@/lib/locale-script';
 import { assertRegistrationBudget } from '@/lib/quota';
 import { clientIp, createRateLimiter } from '@/lib/rate-limit';
-import { API_KEY_PLACEHOLDER, getTrackInfo, registerNumber, UpstreamError } from '@/lib/track17';
-import { isValidTrackingNumber, normalizeTrackingNumber } from '@/lib/tracking-number';
+import {
+  API_KEY_PLACEHOLDER,
+  changeCarrier,
+  getTrackInfo,
+  guessCarrier,
+  needsPostalCode,
+  PostalCodeRequiredError,
+  registerNumber,
+  UpstreamError,
+} from '@/lib/track17';
+import { isCarrierId, normalizeQuery, queryKey, queryProblem, type ParcelQuery } from '@/lib/tracking-number';
 import { CLIENT_HEADER, type ApiError, type ApiErrorCode, type ApiPending, type TrackingData } from '@/lib/types';
 
 /**
- * GET /api/track/{numéro}
+ * GET /api/track/{numéro}?carrier=mondial-relay&postcode=13010
  *
- * Le numéro est dans le chemin, et non dans le corps ou la query string : une réponse prête peut ainsi
- * être gardée par le CDN de Netlify, dont la clé de cache contient toujours le chemin. Les consultations
- * répétées d'un même colis ne réveillent alors ni la fonction serveur, ni 17TRACK, ni Mapbox.
+ * Le numéro est dans le chemin, et non dans le corps : une réponse prête peut ainsi être gardée par le CDN
+ * de Netlify, dont la clé de cache contient toujours le chemin (et, pour une fonction, la query string).
+ * Les consultations répétées d'un même colis ne réveillent alors ni la fonction serveur, ni 17TRACK, ni Mapbox.
+ *
+ * `carrier` et `postcode` sont facultatifs : ils viennent d'un lien de suivi collé par le visiteur, ou du
+ * code postal qu'il a saisi après une réponse `postal_code_required` (422) pour un numéro qui l'exige.
+ * Ils servent aux transporteurs que 17TRACK ne sait pas suivre seul (voir lib/tracking-number.ts).
  *
  * Les messages d'erreur sont rédigés dans la langue par défaut ; le client les réécrit dans la langue
  * affichée à partir de `code` (voir lib/display.ts:apiErrorText).
@@ -21,16 +34,16 @@ import { CLIENT_HEADER, type ApiError, type ApiErrorCode, type ApiPending, type 
 
 // Une recherche en attente relance la route au plus 8 fois en une minute (voir lib/api.ts)
 const requestLimiter = createRateLimiter(30, 60_000);
-// Chaque enregistrement coûte une unité de quota 17TRACK
+// Chaque enregistrement coûte une unité de quota 17TRACK ; un changement de transporteur modifie aussi le compte
 const registerLimiter = createRateLimiter(3, 60 * 60_000);
 
-// Données de suivi récentes, par numéro : un colis ne bouge pas à la minute, inutile de réinterroger
+// Données de suivi récentes, par requête (voir queryKey) : un colis ne bouge pas à la minute, inutile de réinterroger
 // 17TRACK (limité à 3 requêtes par seconde) ni Mapbox à chaque rafraîchissement
 const READY_TTL_S = 180;
 const MAX_CACHED = 200;
 const readyCache = new Map<string, { data: TrackingData; expires: number }>();
-// Numéros enregistrés par cette instance : 17TRACK peut mettre un moment à les reconnaître, on ne les
-// réenregistre pas entre-temps
+// Numéros enregistrés (ou réattribués) par cette instance : 17TRACK peut mettre un moment à les
+// reconnaître, on ne les réenregistre pas entre-temps
 const REGISTERED_TTL_MS = 60 * 60_000;
 const recentlyRegistered = new Map<string, number>();
 
@@ -48,16 +61,19 @@ const ready = (data: TrackingData) =>
     headers: {
       'Cache-Control': 'public, max-age=0, must-revalidate',
       'Netlify-CDN-Cache-Control': `public, durable, s-maxage=${READY_TTL_S}, stale-while-revalidate=60`,
+      // Seuls ces paramètres distinguent deux réponses : un paramètre ajouté au hasard ne contourne pas le cache
+      'Netlify-Vary': 'query=carrier|postcode',
     },
   });
 
 interface FailOptions {
   detail?: number;
+  carrier?: ApiError['carrier'];
   headers?: Record<string, string>;
 }
 
-const fail = (error: string, code: ApiErrorCode, status: number, { detail, headers }: FailOptions = {}) =>
-  Response.json({ error, code, detail } satisfies ApiError, { status, headers: { ...NO_STORE, ...headers } });
+const fail = (error: string, code: ApiErrorCode, status: number, { detail, carrier, headers }: FailOptions = {}) =>
+  Response.json({ error, code, detail, carrier } satisfies ApiError, { status, headers: { ...NO_STORE, ...headers } });
 
 function evictExpired<V>(map: Map<string, V>, isExpired: (value: V) => boolean) {
   for (const [key, value] of map) if (isExpired(value)) map.delete(key);
@@ -77,27 +93,39 @@ function isCrossSite(request: NextRequest): boolean {
   }
 }
 
-async function resolve(trackingNumber: string, apiKey: string, ip: string): Promise<Outcome> {
-  const result = await getTrackInfo(apiKey, trackingNumber, DEFAULT_LOCALE);
+async function resolve(query: ParcelQuery, apiKey: string, ip: string): Promise<Outcome> {
+  const key = queryKey(query);
+  const result = await getTrackInfo(apiKey, query, DEFAULT_LOCALE);
 
   if (result.status === 'ready') {
-    const data = await buildTrackingData(trackingNumber, result.info);
+    const data = await buildTrackingData(query.number, result.info);
     evictExpired(readyCache, ({ expires }) => expires <= Date.now());
     if (readyCache.size >= MAX_CACHED) readyCache.delete(readyCache.keys().next().value!);
-    readyCache.set(trackingNumber, { data, expires: Date.now() + READY_TTL_S * 1000 });
+    readyCache.set(key, { data, expires: Date.now() + READY_TTL_S * 1000 });
     return { kind: 'ready', data };
   }
 
-  // Numéro inconnu de 17TRACK : on l'enregistre pour qu'il commence à le suivre (coûte une unité de quota)
   evictExpired(recentlyRegistered, (registeredAt) => registeredAt <= Date.now() - REGISTERED_TTL_MS);
-  if (result.status === 'unregistered' && !recentlyRegistered.has(trackingNumber)) {
-    const { allowed, retryAfter } = registerLimiter.consume(ip);
-    if (!allowed) throw new RateLimited(retryAfter);
+  if (result.status === 'pending' || recentlyRegistered.has(key)) return { kind: 'pending' };
 
+  // Numéro à enregistrer d'un transporteur qui exige le code postal : on le demande d'abord au visiteur,
+  // plutôt que de laisser 17TRACK le refuser ou l'attribuer à un autre transporteur
+  const carrier = query.carrier ?? (result.status === 'unregistered' ? guessCarrier(query.number) : undefined);
+  if (needsPostalCode(carrier) && !query.postalCode) throw new PostalCodeRequiredError(DEFAULT_LOCALE, carrier);
+
+  const { allowed, retryAfter } = registerLimiter.consume(ip);
+  if (!allowed) throw new RateLimited(retryAfter);
+
+  if (result.status === 'unregistered') {
+    // Numéro inconnu de 17TRACK : on l'enregistre pour qu'il commence à le suivre (coûte une unité de quota)
     await assertRegistrationBudget(apiKey, DEFAULT_LOCALE);
-    await registerNumber(apiKey, trackingNumber, DEFAULT_LOCALE);
-    recentlyRegistered.set(trackingNumber, Date.now());
+    await registerNumber(apiKey, { ...query, carrier }, DEFAULT_LOCALE);
+  } else {
+    // Numéro déjà enregistré, mais sous le mauvais transporteur : on le réattribue. Le quota n'est pas
+    // vérifié : seul un numéro déjà enregistré (donc déjà compté) peut l'être, 5 fois au plus.
+    await changeCarrier(apiKey, query, DEFAULT_LOCALE);
   }
+  recentlyRegistered.set(key, Date.now());
   return { kind: 'pending' };
 }
 
@@ -120,12 +148,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return fail(errors.tooManyRequests, 'rate_limited', 429, { headers: { 'Retry-After': String(retryAfter) } });
   }
 
-  const trackingNumber = normalizeTrackingNumber((await params).number);
-  if (!isValidTrackingNumber(trackingNumber)) {
+  // NextRequest.nextUrl n'est pas lu : les tests passent une Request ordinaire
+  const searchParams = new URL(request.url).searchParams;
+  const carrier = searchParams.get('carrier');
+  if (carrier !== null && !isCarrierId(carrier)) {
+    return fail(errors.invalidNumber, 'invalid_number', 400);
+  }
+  const query = normalizeQuery({
+    number: (await params).number,
+    carrier: carrier ?? undefined,
+    postalCode: searchParams.get('postcode') ?? undefined,
+  });
+  if (queryProblem(query)) {
     return fail(errors.invalidNumber, 'invalid_number', 400);
   }
 
-  const cached = readyCache.get(trackingNumber);
+  const key = queryKey(query);
+  const cached = readyCache.get(key);
   if (cached && cached.expires > Date.now()) {
     return ready(cached.data);
   }
@@ -136,10 +175,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return fail(errors.keyNotConfigured, 'not_configured', 500);
   }
 
-  let flight = inFlight.get(trackingNumber);
+  let flight = inFlight.get(key);
   if (!flight) {
-    flight = resolve(trackingNumber, apiKey, ip).finally(() => inFlight.delete(trackingNumber));
-    inFlight.set(trackingNumber, flight);
+    flight = resolve(query, apiKey, ip).finally(() => inFlight.delete(key));
+    inFlight.set(key, flight);
   }
 
   try {
@@ -152,7 +191,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return fail(errors.tooManyRequests, 'rate_limited', 429, { headers: { 'Retry-After': String(error.retryAfter) } });
     }
     if (error instanceof UpstreamError) {
-      return fail(error.message, error.code, error.status, { detail: error.detail });
+      const carrier = error instanceof PostalCodeRequiredError ? error.carrier : undefined;
+      return fail(error.message, error.code, error.status, { detail: error.detail, carrier });
     }
     console.error('Erreur dans /api/track:', error);
     return fail(errors.internalError, 'internal', 500);

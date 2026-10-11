@@ -1,13 +1,14 @@
 "use client";
 
 import { formatEventDate } from "@/lib/format";
-import { useHistory } from "@/lib/history";
+import { entryQuery, useHistory } from "@/lib/history";
 import { useT } from "@/lib/locale";
 import { STATUS_CLASSES } from "@/lib/status";
 import { countryLabel } from "@/lib/countries";
+import type { ParcelQuery } from "@/lib/tracking-number";
 
 /** Derniers colis suivis sur cet appareil : un clic relance la recherche. */
-export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber: string) => void }) {
+export default function RecentParcels({ onSelect }: { onSelect: (query: ParcelQuery) => void }) {
   const { entries, remove, clear } = useHistory();
   const { locale, t } = useT();
 
@@ -37,7 +38,7 @@ export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber:
             >
               <button
                 type="button"
-                onClick={() => onSelect(entry.number)}
+                onClick={() => onSelect(entryQuery(entry))}
                 className="-my-2.5 flex items-center gap-3 py-2.5 text-left font-mono text-[15px] font-medium hover:text-customs"
               >
                 <span aria-hidden="true" className={`size-3 shrink-0 ${STATUS_CLASSES[entry.status].marker}`} />
@@ -47,7 +48,7 @@ export default function RecentParcels({ onSelect }: { onSelect: (trackingNumber:
               <div className="flex items-center gap-2 md:order-last">
                 <button
                   type="button"
-                  onClick={() => onSelect(entry.number)}
+                  onClick={() => onSelect(entryQuery(entry))}
                   className="label rounded border-2 border-ink px-3 py-2.5 hover:bg-ink hover:text-sheet"
                 >
                   {t.recent.refresh}

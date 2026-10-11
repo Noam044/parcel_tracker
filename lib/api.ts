@@ -1,5 +1,6 @@
 import type { Dictionary } from './dictionary';
 import { apiErrorText } from './display';
+import type { CarrierId, ParcelQuery } from './tracking-number';
 import { CLIENT_HEADER, type ApiError, type ApiErrorCode, type ApiPending, type TrackingData } from './types';
 
 // Un numéro tout juste enregistré peut mettre un moment à recevoir ses premières données. Les données
@@ -14,15 +15,17 @@ const POLL_DELAYS_MS = [4_000, 4_000, 6_000, 8_000, 10_000, 12_000, 16_000];
 export class TrackingError extends Error {
   constructor(
     readonly describe: (t: Dictionary) => string,
-    readonly code?: ApiErrorCode
+    readonly code?: ApiErrorCode,
+    /** postal_code_required : transporteur reconnu par le serveur */
+    readonly carrier?: CarrierId
   ) {
     super(code ?? 'tracking error');
   }
 }
 
-function fromApiError({ error, code, detail }: ApiError): TrackingError {
+function fromApiError({ error, code, detail, carrier }: ApiError): TrackingError {
   // Un code inconnu (client plus ancien que le serveur) : le message du serveur fait foi
-  return new TrackingError((t) => (code ? apiErrorText(code, detail, t) : error), code);
+  return new TrackingError((t) => (code ? apiErrorText(code, detail, t) : error), code, carrier);
 }
 
 function isApiError(payload: unknown): payload is ApiError {
@@ -37,11 +40,20 @@ function isTrackingData(payload: unknown): payload is TrackingData {
   return typeof payload === 'object' && payload !== null && Array.isArray((payload as TrackingData).events);
 }
 
+/** Chemin de l'API pour un colis : « /api/track/{numéro}?carrier=…&postcode=… ». */
+export function apiPath({ number, carrier, postalCode }: ParcelQuery): string {
+  const params = new URLSearchParams();
+  if (carrier) params.set('carrier', carrier);
+  if (postalCode) params.set('postcode', postalCode);
+  const search = params.size ? `?${params}` : '';
+  return `/api/track/${encodeURIComponent(number)}${search}`;
+}
+
 /** Une seule requête : les données de suivi, ou null si le colis n'a pas encore de données. */
-async function requestTracking(trackingNumber: string, signal?: AbortSignal): Promise<TrackingData | null> {
+async function requestTracking(query: ParcelQuery, signal?: AbortSignal): Promise<TrackingData | null> {
   // Numéro dans le chemin : un suivi prêt peut être servi par le CDN (voir app/api/track/[number]/route.ts).
   // Les messages d'erreur sont rédigés ici, dans la langue affichée, à partir du code renvoyé.
-  const response = await fetch(`/api/track/${encodeURIComponent(trackingNumber)}`, {
+  const response = await fetch(apiPath(query), {
     headers: { [CLIENT_HEADER]: '1' },
     signal,
   });
@@ -83,11 +95,11 @@ interface TrackOptions {
  * Renvoie null si le colis reste introuvable après toutes les tentatives.
  */
 export async function trackParcel(
-  trackingNumber: string,
+  query: ParcelQuery,
   { signal, onPending }: TrackOptions = {}
 ): Promise<TrackingData | null> {
   for (let poll = 0; poll <= POLL_DELAYS_MS.length; poll++) {
-    const data = await requestTracking(trackingNumber, signal);
+    const data = await requestTracking(query, signal);
     if (data) return data;
 
     if (poll < POLL_DELAYS_MS.length) {

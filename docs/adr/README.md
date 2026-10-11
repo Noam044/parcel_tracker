@@ -9,5 +9,6 @@ Short notes on decisions that the code alone does not explain: what was decided,
 | [0003](0003-separate-mapbox-tokens.md) | Use a separate, server-only Mapbox token for geocoding | 2026-09-28 |
 | [0004](0004-language-neutral-api-data.md) | Keep API data language-neutral and write all text in the browser | 2026-09-22 |
 | [0005](0005-netlify-deploys-from-a-production-branch.md) | Netlify builds from a `production` branch; GitHub Actions only checks | 2026-09-20 |
+| [0006](0006-carrier-tracking-links.md) | Let visitors name the carrier when 17TRACK cannot, and ask for the postal code it needs | 2026-10-11 |
 
 New record: copy the most recent one, take the next number, and add it to this table.

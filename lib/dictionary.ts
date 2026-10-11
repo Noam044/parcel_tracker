@@ -38,9 +38,21 @@ export interface Dictionary {
     submitIdle: string;
     submitLoading: string;
     missingNumber: string;
+    unknownLink: string;
+    carrierLabel: string;
+    carrierAuto: string;
     hint: string;
     placeholder: string;
     backHome: string;
+  };
+  postalCode: {
+    tag: string;
+    /** `carrier` : nom du transporteur reconnu, s'il l'est */
+    intro: (carrier: string | undefined) => string;
+    label: string;
+    placeholder: string;
+    missing: string;
+    invalid: string;
   };
   banner: {
     errorTag: string;
@@ -174,9 +186,23 @@ const fr: Dictionary = {
     submitIdle: 'Suivre le colis',
     submitLoading: 'Recherche…',
     missingNumber: 'Saisissez un numéro de suivi, puis cliquez sur « Suivre le colis ».',
-    hint: 'Tous les transporteurs, sans compte. Le transporteur est reconnu automatiquement.',
+    unknownLink: "Ce lien n'est pas reconnu. Collez le numéro de suivi seul.",
+    carrierLabel: 'Transporteur',
+    carrierAuto: 'Détection automatique (recommandé)',
+    hint: 'Tous les transporteurs, sans compte. Le transporteur est reconnu automatiquement : ne le choisissez que pour Mondial Relay ou Vinted Go.',
     placeholder: 'Collez votre numéro ici',
     backHome: 'Accueil et derniers colis',
+  },
+  postalCode: {
+    tag: 'Code postal requis',
+    intro: (carrier) =>
+      carrier
+        ? `Colis ${carrier} : pour le suivre, le transporteur demande le code postal du destinataire.`
+        : 'Pour suivre ce colis, le transporteur demande le code postal du destinataire.',
+    label: 'Code postal du destinataire',
+    placeholder: 'Ex. 75001',
+    missing: 'Saisissez le code postal du destinataire.',
+    invalid: "Ce code postal n'est pas valide : 3 à 10 lettres ou chiffres.",
   },
   banner: {
     errorTag: 'Erreur',
@@ -262,6 +288,10 @@ const fr: Dictionary = {
         text: 'Les lieux sont convertis en points sur la carte. Ils indiquent une zone (une ville, un centre de tri), jamais une adresse. Certains transporteurs ne donnent aucun lieu.',
       },
       {
+        label: 'Code postal',
+        text: "Mondial Relay ne donne le suivi qu'avec le code postal du destinataire : choisissez ce transporteur pour le saisir, sinon il vous est demandé après la recherche.",
+      },
+      {
         label: 'Nouveau numéro',
         text: 'Un colis tout juste expédié peut mettre quelques minutes à apparaître. La recherche se relance toute seule.',
       },
@@ -319,11 +349,13 @@ const fr: Dictionary = {
     searchGenericError: 'Une erreur est survenue',
     parcelNotYetAvailable: "Ce colis n'est pas encore disponible auprès des transporteurs. Réessayez dans quelques minutes.",
     rejection: {
-      '-18019903': "17TRACK ne reconnaît pas le transporteur de ce numéro. Vérifiez qu'il est correct.",
+      '-18019903':
+        "17TRACK ne reconnaît pas le transporteur de ce numéro. Vérifiez qu'il est correct, ou choisissez le transporteur dans la liste.",
       '-18019911': 'Le suivi de ce transporteur est momentanément indisponible chez 17TRACK. Réessayez plus tard.',
       '-18010012': "Le format de ce numéro de suivi n'est pas valide.",
-      '-18010018': 'Ce transporteur exige un code postal que ce site ne demande pas encore.',
-      '-18010019': 'Ce transporteur exige un code postal que ce site ne demande pas encore.',
+      '-18010018': 'Ce transporteur exige un pays et un code postal que ce site ne demande pas encore.',
+      '-18010019': "Le transporteur n'a pas accepté ce code postal. Vérifiez qu'il s'agit bien de celui du destinataire.",
+      '-18019807': 'Le transporteur de ce numéro a déjà été changé trop de fois chez 17TRACK.',
       '-18010020': 'Ce transporteur exige un numéro de téléphone que ce site ne demande pas encore.',
     },
     rejectionFallback: '17TRACK a refusé ce numéro de suivi.',
@@ -356,9 +388,23 @@ const en: Dictionary = {
     submitIdle: 'Track parcel',
     submitLoading: 'Searching…',
     missingNumber: 'Enter a tracking number, then click "Track parcel".',
-    hint: 'Every carrier, no account needed. The carrier is recognised automatically.',
+    unknownLink: "This link isn't recognised. Paste the tracking number alone.",
+    carrierLabel: 'Carrier',
+    carrierAuto: 'Automatic detection (recommended)',
+    hint: 'Every carrier, no account needed. The carrier is recognised automatically: only pick it for Mondial Relay or Vinted Go.',
     placeholder: 'Paste your tracking number',
     backHome: 'Home and recent parcels',
+  },
+  postalCode: {
+    tag: 'Postal code needed',
+    intro: (carrier) =>
+      carrier
+        ? `${carrier} parcel: to track it, the carrier asks for the recipient's postal code.`
+        : "To track this parcel, the carrier asks for the recipient's postal code.",
+    label: "Recipient's postal code",
+    placeholder: 'e.g. 75001',
+    missing: "Enter the recipient's postal code.",
+    invalid: "This postal code isn't valid: 3 to 10 letters or digits.",
   },
   banner: {
     errorTag: 'Error',
@@ -443,6 +489,10 @@ const en: Dictionary = {
         text: "Places are converted into points on the map. They show an area (a city, a sorting centre), never an address. Some carriers give no place at all.",
       },
       {
+        label: 'Postal code',
+        text: "Mondial Relay only shares tracking with the recipient's postal code: pick this carrier to enter it, or you'll be asked for it after searching.",
+      },
+      {
         label: 'New number',
         text: 'A parcel that was just shipped can take a few minutes to appear. The search retries by itself.',
       },
@@ -499,11 +549,13 @@ const en: Dictionary = {
     searchGenericError: 'Something went wrong',
     parcelNotYetAvailable: "This parcel isn't available from carriers yet. Try again in a few minutes.",
     rejection: {
-      '-18019903': "17TRACK doesn't recognise the carrier for this number. Check that it's correct.",
+      '-18019903':
+        "17TRACK doesn't recognise the carrier for this number. Check that it's correct, or pick the carrier from the list.",
       '-18019911': 'Tracking for this carrier is temporarily unavailable at 17TRACK. Try again later.',
       '-18010012': 'The format of this tracking number is not valid.',
-      '-18010018': "This carrier requires a postal code that this site doesn't ask for yet.",
-      '-18010019': "This carrier requires a postal code that this site doesn't ask for yet.",
+      '-18010018': "This carrier requires a country and a postal code that this site doesn't ask for yet.",
+      '-18010019': "The carrier didn't accept this postal code. Check that it's the recipient's.",
+      '-18019807': "This number's carrier has already been changed too many times at 17TRACK.",
       '-18010020': "This carrier requires a phone number that this site doesn't ask for yet.",
     },
     rejectionFallback: '17TRACK rejected this tracking number.',

@@ -30,6 +30,9 @@ A parcel from abroad changes hands three or four times, and every carrier has it
 ## Features
 
 - **Any carrier, no account**: 17TRACK detects the carrier from the number. Formats it cannot detect on its own (Chronopost Shop2Shop numbers ending in `TS`) are hinted explicitly.
+- **Optional carrier menu**: automatic detection by default, or **Mondial Relay** and **Vinted Go**, the two carriers 17TRACK cannot track from the number alone. Choosing Mondial Relay shows a field for the recipient's postal code, which this carrier requires. Choosing Vinted Go matters because 17TRACK mistakes its numbers for another carrier's; a number registered that way is moved to the right one.
+- **Postal code when the carrier needs it**: without the menu, a new Mondial Relay number (8 digits) is still recognised, and the page then asks for the postal code. The same happens whenever 17TRACK refuses a number for lack of a postal code.
+- **Tracking links too**: a pasted Mondial Relay or Vinted Go link is read for its number, carrier and postal code.
 - **Route on a map**: each scan is geocoded from the carrier's text (UN/LOCODE codes, Chinese postal codes, cleaned-up place names), the route so far is drawn dashed and the remaining leg runs straight to the destination.
 - **Key figures**: steps, journey time, distance as the crow flies, last scan ("yesterday") and estimated arrival, from the carrier or approximated when it gives none.
 - **History by day**: click a step to see it on the map, click a marker to find it in the list. Long carrier messages are collapsed.
@@ -95,10 +98,10 @@ To save build minutes, this project deploys from a dedicated `production` branch
 
 ### Tracking a parcel
 
-1. **Search**: the number is normalised (spaces removed, upper case) and checked in the browser (5 to 50 letters or digits, at least one digit), then the URL becomes `?n=NUMBER`.
-2. **Request**: `GET /api/track/{number}`. The number is in the path so that the Netlify CDN can cache a ready response for 3 minutes: looking at the same parcel again wakes up neither the function, nor 17TRACK, nor Mapbox.
-3. **Known number**: `gettrackinfo` (free) returns the events, which are turned into the page's data (see below).
-4. **Unknown number**: after the quota checks, the number is registered with `register` (1 quota unit) and the API answers `202 Pending`. The browser asks again after 4, 4, 6, 8, 10, 12 and 16 s: one minute, 8 requests.
+1. **Search**: the number is normalised (spaces removed, upper case) and checked in the browser (5 to 50 letters or digits, at least one digit), then the URL becomes `?n=NUMBER`. When a carrier was chosen (or read from a pasted link) or a postal code was given, the URL becomes `?n=NUMBER&c=mondial-relay&cp=POSTCODE`.
+2. **Request**: `GET /api/track/{number}`, plus `?carrier=…&postcode=…` when they are known. The number is in the path so that the Netlify CDN can cache a ready response for 3 minutes: looking at the same parcel again wakes up neither the function, nor 17TRACK, nor Mapbox.
+3. **Known number**: `gettrackinfo` (free, with the carrier when a link named it) returns the events, which are turned into the page's data (see below).
+4. **Unknown number**: if it needs a postal code that was not given (an 8-digit Mondial Relay number, or 17TRACK says so), the API answers `422 postal_code_required` with the carrier, nothing is registered, and the form selects that carrier and shows the postal code field. Otherwise, after the quota checks, the number is registered with `register` (1 quota unit, with the carrier and postal code when known) and the API answers `202 Pending`. A number already registered under another carrier than the chosen one is moved with `changecarrier` (17TRACK allows 5 changes per number). The browser asks again after 4, 4, 6, 8, 10, 12 and 16 s: one minute, 8 requests.
 5. **Display**: the result gets the keyboard focus and is announced, the tab title becomes `LP123456785CN · In transit`, and the parcel is added to the recent parcels.
 
 ### From 17TRACK events to a map
@@ -136,6 +139,7 @@ components/
 ├── MapPanel.tsx                 Static preview, legend, on-demand interactive map
 ├── TrackingMap.tsx              mapbox-gl map (markers, popups, theme switch)
 ├── ParcelHeader.tsx             Status, progress and key figures
+├── TrackingForm.tsx             Number, optional carrier menu and postal code
 ├── TrackingTimeline.tsx         History grouped by day
 └── …                            Form, recent parcels, banners, guide, toggles
 lib/
@@ -143,6 +147,7 @@ lib/
 ├── quota.ts                     Quota guard before every registration
 ├── rate-limit.ts                Per-IP rate limiter
 ├── tracking.ts                  17TRACK data → page data
+├── tracking-number.ts           Number and postal code rules, Mondial Relay / Vinted Go tracking links
 ├── locations.ts                 Place resolution (UN/LOCODE, postal codes, cleaned names)
 ├── geocode.ts                   Parallel Mapbox geocoding with cache
 ├── map-view.ts                  Framing shared by the static preview and the interactive map
@@ -192,7 +197,9 @@ The home page scores 97 on mobile and 100 on desktop, and every page scores 100 
 | Case | Behaviour |
 |---|---|
 | Empty or impossible number | message under the field, no request sent |
-| Carrier not recognised by 17TRACK | explicit message with the 17TRACK code |
+| Carrier not recognised by 17TRACK | explicit message with the 17TRACK code, suggesting to pick the carrier |
+| Carrier needs the recipient's postal code | the postal code field appears in the form, then the search resumes |
+| Unrecognised link | message under the field, no request sent |
 | Daily registration limit reached | neutral "daily limit reached" banner, tracked numbers still work |
 | No data yet after a minute | "not available yet, try again in a few minutes" |
 | Too many searches from one connection | "please wait" message (HTTP 429 with `Retry-After`) |

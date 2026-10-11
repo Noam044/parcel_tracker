@@ -1,11 +1,15 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { STATUS_CLASSES } from './status';
+import { isCarrierId, type CarrierId, type ParcelQuery } from './tracking-number';
 import type { TrackingStatus } from './types';
 
 // Historique des derniers colis, conservé uniquement dans le navigateur
 
 export interface HistoryEntry {
   number: string;
+  /** Transporteur et code postal tirés du lien de suivi collé, pour relancer la même recherche */
+  carrierId?: CarrierId;
+  postalCode?: string;
   /** Vide si non identifié par 17TRACK : le client affiche un texte de repli traduit */
   carrier: string;
   status: TrackingStatus;
@@ -29,7 +33,9 @@ function isEntry(value: unknown): value is HistoryEntry {
     hasRequiredStrings &&
     // Un statut inconnu (données corrompues ou d'une ancienne version) ferait planter l'affichage
     Object.hasOwn(STATUS_CLASSES, entry.status as string) &&
-    (entry.lastLocationCountryCode === undefined || typeof entry.lastLocationCountryCode === 'string')
+    (entry.lastLocationCountryCode === undefined || typeof entry.lastLocationCountryCode === 'string') &&
+    (entry.carrierId === undefined || isCarrierId(entry.carrierId)) &&
+    (entry.postalCode === undefined || typeof entry.postalCode === 'string')
   );
 }
 
@@ -68,6 +74,11 @@ function subscribe(onChange: () => void) {
     window.removeEventListener('storage', onChange);
     window.removeEventListener(CHANGE_EVENT, onChange);
   };
+}
+
+/** La recherche qui a mené à ce colis. */
+export function entryQuery({ number, carrierId, postalCode }: HistoryEntry): ParcelQuery {
+  return { number, ...(carrierId && { carrier: carrierId }), ...(postalCode && { postalCode }) };
 }
 
 /** Place le colis en tête de l'historique (sans doublon). */

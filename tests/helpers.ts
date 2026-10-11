@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 
-type Endpoint = 'register' | 'gettrackinfo' | 'getquota';
+type Endpoint = 'register' | 'gettrackinfo' | 'getquota' | 'changecarrier' | 'changeinfo';
 
 /** Réponse simulée : un corps JSON (HTTP 200), ou une réponse complète pour tester les erreurs HTTP. */
 type Reply = unknown | Response;

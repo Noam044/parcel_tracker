@@ -4,13 +4,16 @@ import type { Dictionary } from './dictionary';
 import { rememberParcel } from './history';
 import { summarizeJourney, type JourneyStats } from './journey';
 import { useT } from './locale';
-import { isValidTrackingNumber } from './tracking-number';
+import { CARRIER_NAMES, queryProblem, type CarrierId, type ParcelQuery } from './tracking-number';
 import type { TrackingData } from './types';
 
-export type BannerTone = 'error' | 'notice' | 'limit';
+export type BannerTone = 'error' | 'notice' | 'limit' | 'postal';
 
 interface Message {
-  /** notice : colis introuvable pour l'instant ; limit : limite du jour atteinte (pas une panne) */
+  /**
+   * notice : colis introuvable pour l'instant ; limit : limite du jour atteinte (pas une panne) ;
+   * postal : le transporteur demande le code postal du destinataire, à saisir dans le formulaire
+   */
   tone: BannerTone;
   /** Rédigé à l'affichage, pour suivre la langue même si elle change après la recherche */
   describe: (t: Dictionary) => string;
@@ -24,6 +27,8 @@ interface SearchState {
   /** true dès que 17TRACK n'a pas encore de données et que la recherche se poursuit */
   isWaiting: boolean;
   message: Message | null;
+  /** Numéro pour lequel le serveur réclame le code postal du destinataire */
+  postalCodeFor: string | null;
 }
 
 const INITIAL_STATE: SearchState = {
@@ -32,6 +37,7 @@ const INITIAL_STATE: SearchState = {
   isLoading: false,
   isWaiting: false,
   message: null,
+  postalCodeFor: null,
 };
 
 function messageFor(err: unknown): Message {
@@ -41,7 +47,12 @@ function messageFor(err: unknown): Message {
   return { tone: 'error', describe: (t) => t.errors.searchGenericError };
 }
 
-export function useParcelSearch() {
+interface SearchOptions {
+  /** Le colis ne peut être suivi sans code postal ; `carrier` : transporteur reconnu par le serveur */
+  onPostalCodeRequired?: (carrier: CarrierId | undefined) => void;
+}
+
+export function useParcelSearch({ onPostalCodeRequired }: SearchOptions = {}) {
   const [state, setState] = useState<SearchState>(INITIAL_STATE);
   const requestRef = useRef<AbortController | null>(null);
   const { locale, t } = useT();
@@ -56,12 +67,12 @@ export function useParcelSearch() {
     setState(INITIAL_STATE);
   };
 
-  /** `trackingNumber` doit être normalisé (voir lib/tracking-number.ts). */
-  const search = async (trackingNumber: string) => {
+  /** `query` doit être normalisée (voir lib/tracking-number.ts). */
+  const search = async (query: ParcelQuery) => {
     requestRef.current?.abort();
 
     // Un numéro invalide (ex: arrivé par l'URL) n'a pas besoin d'aller jusqu'au serveur
-    if (!isValidTrackingNumber(trackingNumber)) {
+    if (queryProblem(query)) {
       requestRef.current = null;
       setState({ ...INITIAL_STATE, message: { tone: 'error', describe: (t) => t.errors.invalidNumber } });
       return;
@@ -72,7 +83,7 @@ export function useParcelSearch() {
 
     setState({ ...INITIAL_STATE, isLoading: true });
     try {
-      const data = await trackParcel(trackingNumber, {
+      const data = await trackParcel(query, {
         signal: controller.signal,
         onPending: () => setState((current) => ({ ...current, isWaiting: true })),
       });
@@ -86,6 +97,8 @@ export function useParcelSearch() {
       const lastKnown = data.events.find((event) => event.coordinates) ?? data.events[0];
       rememberParcel({
         number: data.trackingNumber,
+        carrierId: query.carrier,
+        postalCode: query.postalCode,
         carrier: data.carrier,
         status: data.status,
         lastLocation: lastKnown?.location ?? '',
@@ -95,6 +108,16 @@ export function useParcelSearch() {
       setState({ ...INITIAL_STATE, data, fetchedAt: Date.now() });
     } catch (err) {
       if (controller.signal.aborted) return;
+      if (err instanceof TrackingError && err.code === 'postal_code_required') {
+        const carrierName = err.carrier && CARRIER_NAMES[err.carrier];
+        onPostalCodeRequired?.(err.carrier);
+        setState({
+          ...INITIAL_STATE,
+          postalCodeFor: query.number,
+          message: { tone: 'postal', describe: (t) => t.postalCode.intro(carrierName) },
+        });
+        return;
+      }
       setState({ ...INITIAL_STATE, message: messageFor(err) });
     }
   };

@@ -10,28 +10,34 @@ import SearchProgress from "@/components/SearchProgress";
 import SiteFooter from "@/components/SiteFooter";
 import SiteHeader from "@/components/SiteHeader";
 import Specimen from "@/components/Specimen";
-import TrackingForm from "@/components/TrackingForm";
+import TrackingForm, { EMPTY_FORM, type TrackingFormValue } from "@/components/TrackingForm";
 import { useHistory } from "@/lib/history";
 import { useT } from "@/lib/locale";
-import { normalizeTrackingNumber } from "@/lib/tracking-number";
-import { clearDeeplink, NUMBER_PARAM } from "@/lib/url-script";
+import { normalizeQuery, parseTrackingInput, type ParcelQuery } from "@/lib/tracking-number";
+import { clearDeeplink, pageSearch, readParcelQuery } from "@/lib/url-script";
 import { useParcelSearch } from "@/lib/use-parcel-search";
 
 /**
- * Signale chaque changement du numéro dans l'URL, y compris au premier chargement. Le colis affiché vit
- * dans l'URL (?n=…) : un suivi se recharge, se partage, se met en favori, et les boutons Précédent/Suivant
- * du navigateur passent d'un colis à l'autre ou reviennent à l'accueil.
+ * Signale chaque changement du colis dans l'URL, y compris au premier chargement. Le colis affiché vit
+ * dans l'URL (?n=…, avec &c=…&cp=… quand il vient d'un lien de suivi) : un suivi se recharge, se partage,
+ * se met en favori, et les boutons Précédent/Suivant du navigateur passent d'un colis à l'autre ou
+ * reviennent à l'accueil.
  */
-function UrlNumber({ onChange }: { onChange: (number: string | null) => void }) {
-  const number = useSearchParams().get(NUMBER_PARAM);
+function UrlParcel({ onChange }: { onChange: (query: ParcelQuery | null) => void }) {
+  const search = useSearchParams().toString();
   const notify = useEffectEvent(onChange);
-  useEffect(() => notify(number), [number]);
+  useEffect(() => notify(readParcelQuery(new URLSearchParams(search))), [search]);
   return null;
 }
 
 export default function Home() {
-  const { data, stats, isLoading, isWaiting, banner, search, reset } = useParcelSearch();
-  const [query, setQuery] = useState("");
+  const [form, setForm] = useState<TrackingFormValue>(EMPTY_FORM);
+  const { data, stats, isLoading, isWaiting, banner, postalCodeFor, search, reset } = useParcelSearch({
+    // Transporteur reconnu par le serveur (ex: Mondial Relay) : le menu l'affiche, à côté du code postal demandé
+    onPostalCodeRequired: (carrier) => {
+      if (carrier) setForm((current) => ({ ...current, carrier }));
+    },
+  });
   const { t } = useT();
   const hasHistory = useHistory().entries.length > 0;
   // Après un retour à l'accueil, le focus clavier revient au champ plutôt que de se perdre
@@ -40,33 +46,36 @@ export default function Home() {
   // Une fois un colis affiché (ou en cours de recherche), le formulaire cède la place aux résultats
   const isCompact = isLoading || !!data;
 
-  const showNumber = (number: string | null) => {
-    if (!number) {
+  const showParcel = (parcel: ParcelQuery | null) => {
+    if (!parcel) {
       clearDeeplink();
-      setQuery("");
+      setForm(EMPTY_FORM);
       reset();
       return;
     }
-    const normalized = normalizeTrackingNumber(number);
+    const normalized = normalizeQuery(parcel);
     // Lien collé en minuscules ou avec des espaces : l'adresse reprend la forme canonique, et ce changement
-    // d'URL rappelle showNumber avec le numéro corrigé (une seule recherche part)
-    if (normalized !== number) {
-      window.history.replaceState(null, "", `?${NUMBER_PARAM}=${encodeURIComponent(normalized)}`);
+    // d'URL rappelle showParcel avec le numéro corrigé (une seule recherche part)
+    const canonical = pageSearch(normalized);
+    if (canonical !== window.location.search) {
+      window.history.replaceState(null, "", canonical);
       return;
     }
-    setQuery(normalized);
+    // Le formulaire reprend le colis affiché, transporteur et code postal compris
+    setForm({ text: normalized.number, carrier: normalized.carrier ?? "", postalCode: normalized.postalCode ?? "" });
     // Le résultat s'affiche en haut de page : sans ça, un clic dans l'historique laissait la page défilée
     window.scrollTo({ top: 0 });
     search(normalized);
   };
 
-  const handleSearch = (trackingNumber: string) => {
-    const number = normalizeTrackingNumber(trackingNumber);
-    if (new URLSearchParams(window.location.search).get(NUMBER_PARAM) === number) {
+  const handleSearch = (parcel: ParcelQuery) => {
+    const next = normalizeQuery(parcel);
+    const target = pageSearch(next);
+    if (target === window.location.search) {
       // Même colis (bouton « Actualiser ») : l'URL ne change pas, on relance directement
-      showNumber(number);
+      showParcel(next);
     } else {
-      window.history.pushState(null, "", `?${NUMBER_PARAM}=${encodeURIComponent(number)}`);
+      window.history.pushState(null, "", target);
     }
   };
 
@@ -76,12 +85,13 @@ export default function Home() {
     if (window.location.search) {
       window.history.pushState(null, "", window.location.pathname);
     } else {
-      showNumber(null);
+      showParcel(null);
     }
   };
 
   // Lien direct (?n=…) : l'accueil était masqué avant le premier rendu (voir lib/url-script.ts). Dès que la
-  // recherche est lancée, ou qu'elle échoue d'emblée (numéro invalide), la page a pris le relais.
+  // recherche est lancée, qu'elle échoue d'emblée (numéro invalide) ou qu'elle attend un code postal, la
+  // page a pris le relais.
   const hasBanner = !!banner;
   useLayoutEffect(() => {
     if (isCompact || hasBanner) clearDeeplink();
@@ -108,7 +118,7 @@ export default function Home() {
   return (
     <>
       <Suspense fallback={null}>
-        <UrlNumber onChange={showNumber} />
+        <UrlParcel onChange={showParcel} />
       </Suspense>
 
       <SiteHeader onHome={goHome} />
@@ -132,7 +142,7 @@ export default function Home() {
                 <span aria-hidden="true">←</span>
                 {t.form.backHome}
               </button>
-              <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} compact />
+              <TrackingForm value={form} onChange={setForm} onSubmit={handleSearch} isLoading={isLoading} compact />
             </>
           ) : (
             <>
@@ -150,7 +160,14 @@ export default function Home() {
                   </h1>
                   <p className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-soft">{t.hero.subtitle}</p>
                   <div className="mt-10">
-                    <TrackingForm value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} />
+                    <TrackingForm
+                      value={form}
+                      onChange={setForm}
+                      onSubmit={handleSearch}
+                      isLoading={isLoading}
+                      // Seulement tant que le champ contient le numéro concerné
+                      asksPostalCode={!!postalCodeFor && parseTrackingInput(form.text)?.number === postalCodeFor}
+                    />
                     {/* Juste sous le formulaire : sur téléphone, la colonne d'exemple passe dessous et masquerait le message */}
                     {banner && <Banner tone={banner.tone}>{banner.text}</Banner>}
                   </div>

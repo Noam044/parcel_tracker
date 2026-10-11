@@ -1,6 +1,7 @@
 import { DICTIONARY } from './dictionary';
 import { rejectionText } from './display';
 import type { Locale } from './locale-script';
+import { CARRIER_NAMES, type CarrierId, type ParcelQuery } from './tracking-number';
 import type { ApiErrorCode, Coordinates, TrackingStatus } from './types';
 
 const API_BASE = 'https://api.17track.net/track/v2.2';
@@ -63,6 +64,10 @@ interface ApiResponse {
 const NOT_REGISTERED = -18019902;
 // Code renvoyé par register quand le numéro l'est déjà (ex: deux onglets qui cherchent le même colis)
 const ALREADY_REGISTERED = -18019901;
+// Code renvoyé par gettrackinfo quand le numéro est enregistré, mais sous un autre transporteur que celui demandé
+const OTHER_CARRIER = -18019910;
+// Codes renvoyés par register quand le transporteur exige le code postal du destinataire
+const POSTAL_CODE_REQUIRED = new Set([-18010018, -18010019]);
 // Plafond quotidien du compte (réglage max_track_daily) ou quota total épuisé
 const OUT_OF_QUOTA = new Set([-18019907, -18019908]);
 
@@ -78,6 +83,39 @@ const CARRIER_HINTS: { pattern: RegExp; carrier: number; name: string }[] = [
 
 export function carrierHint(number: string): number | undefined {
   return CARRIER_HINTS.find(({ pattern }) => pattern.test(number))?.carrier;
+}
+
+/** Clés 17TRACK des transporteurs désignés par un lien de suivi (voir lib/tracking-number.ts). */
+export const CARRIER_KEYS: Record<CarrierId, number> = {
+  'mondial-relay': 100304,
+  'vinted-go': 101020,
+};
+
+/**
+ * Transporteur reconnu au format du numéro, parmi ceux qui ont besoin d'une information en plus. Les
+ * numéros d'expédition Mondial Relay comptent 8 chiffres : 17TRACK ne les enregistre pas sans code postal.
+ * Ne sert qu'à l'enregistrement : un numéro déjà suivi l'est sous le transporteur choisi alors.
+ */
+export function guessCarrier(number: string): CarrierId | undefined {
+  return /^\d{8}$/.test(number) ? 'mondial-relay' : undefined;
+}
+
+/** Transporteurs qui exigent le code postal du destinataire pour être suivis. */
+export const needsPostalCode = (carrier: CarrierId | undefined) => carrier === 'mondial-relay';
+
+/** Une requête telle que 17TRACK l'attend : transporteur sous forme de clé, code postal du destinataire. */
+interface TrackRequest {
+  number: string;
+  carrier?: number;
+  destination_postal_code?: string;
+}
+
+function trackRequest({ number, carrier, postalCode }: ParcelQuery): TrackRequest {
+  return {
+    number,
+    ...(carrier && { carrier: CARRIER_KEYS[carrier] }),
+    ...(postalCode && { destination_postal_code: postalCode }),
+  };
 }
 
 /**
@@ -102,7 +140,7 @@ function rejectionError(code: number | undefined, locale: Locale): UpstreamError
 
 /** Appel brut à 17TRACK. Les détails techniques restent dans les logs serveur, jamais dans la réponse au client. */
 export async function post<T>(
-  endpoint: 'register' | 'gettrackinfo' | 'getquota',
+  endpoint: 'register' | 'gettrackinfo' | 'getquota' | 'changecarrier' | 'changeinfo',
   apiKey: string,
   body: unknown,
   locale: Locale
@@ -140,6 +178,23 @@ export async function post<T>(
   return json;
 }
 
+/**
+ * Le colis ne peut être enregistré sans le code postal du destinataire : le client le demande au visiteur,
+ * puis relance la recherche avec `carrier` (s'il est connu) et ce code postal.
+ */
+export class PostalCodeRequiredError extends UpstreamError {
+  constructor(
+    locale: Locale,
+    readonly carrier?: CarrierId
+  ) {
+    super(
+      DICTIONARY[locale].postalCode.intro(carrier && CARRIER_NAMES[carrier]),
+      'postal_code_required',
+      422
+    );
+  }
+}
+
 /** Plus aucun nouveau numéro ne peut être enregistré aujourd'hui (limite du site, de 17TRACK, ou quota épuisé). */
 export class RegistrationsPausedError extends UpstreamError {
   constructor(locale: Locale) {
@@ -147,24 +202,25 @@ export class RegistrationsPausedError extends UpstreamError {
   }
 }
 
-const call = (endpoint: 'register' | 'gettrackinfo', apiKey: string, number: string, locale: Locale, carrier?: number) =>
-  post<ApiResponse>(endpoint, apiKey, [carrier ? { number, carrier } : { number }], locale);
-
 export type TrackInfoResult =
   | { status: 'ready'; info: RawTrackInfo }
   /** Numéro jamais enregistré : il faut l'enregistrer avant de pouvoir le suivre */
   | { status: 'unregistered' }
+  /** Numéro enregistré sous un autre transporteur que celui demandé (17TRACK s'était trompé) */
+  | { status: 'other_carrier' }
   /** Numéro enregistré mais sans données de suivi pour l'instant */
   | { status: 'pending' };
 
-export async function getTrackInfo(apiKey: string, number: string, locale: Locale): Promise<TrackInfoResult> {
-  const json = await call('gettrackinfo', apiKey, number, locale);
+export async function getTrackInfo(apiKey: string, query: ParcelQuery, locale: Locale): Promise<TrackInfoResult> {
+  const { number, carrier } = trackRequest(query);
+  const json = await post<ApiResponse>('gettrackinfo', apiKey, [carrier ? { number, carrier } : { number }], locale);
 
   const trackInfo = json.data?.accepted?.[0]?.track_info;
   if (trackInfo?.tracking) return { status: 'ready', info: trackInfo };
 
   const rejection = json.data?.rejected?.[0]?.error;
   if (rejection?.code === NOT_REGISTERED) return { status: 'unregistered' };
+  if (rejection?.code === OTHER_CARRIER && carrier) return { status: 'other_carrier' };
   if (rejection) {
     console.warn('Numéro rejeté par 17TRACK :', rejection.code, rejection.message);
     throw rejectionError(rejection.code, locale);
@@ -174,11 +230,13 @@ export async function getTrackInfo(apiKey: string, number: string, locale: Local
 }
 
 /**
- * Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre.
- * Le transporteur est désigné quand on connaît le format du numéro (voir CARRIER_HINTS).
+ * Enregistre un numéro auprès de 17TRACK pour qu'il commence à le suivre. Le transporteur est désigné
+ * quand le visiteur a collé son lien de suivi, ou quand on connaît le format du numéro (voir CARRIER_HINTS).
  */
-export async function registerNumber(apiKey: string, number: string, locale: Locale): Promise<void> {
-  const json = await call('register', apiKey, number, locale, carrierHint(number));
+export async function registerNumber(apiKey: string, query: ParcelQuery, locale: Locale): Promise<void> {
+  const request = trackRequest(query);
+  request.carrier ??= carrierHint(request.number);
+  const json = await post<ApiResponse>('register', apiKey, [request], locale);
 
   const rejection = json.data?.rejected?.[0]?.error;
   if (!rejection || rejection.code === ALREADY_REGISTERED) return;
@@ -187,7 +245,42 @@ export async function registerNumber(apiKey: string, number: string, locale: Loc
   if (rejection.code !== undefined && OUT_OF_QUOTA.has(rejection.code)) {
     throw new RegistrationsPausedError(locale);
   }
+  // Transporteur détecté par 17TRACK, mais qui exige un code postal que le visiteur n'a pas encore donné
+  if (rejection.code !== undefined && POSTAL_CODE_REQUIRED.has(rejection.code) && !query.postalCode) {
+    throw new PostalCodeRequiredError(locale, query.carrier);
+  }
   throw rejectionError(rejection.code, locale);
+}
+
+/**
+ * Réattribue un numéro déjà enregistré au transporteur désigné par le lien de suivi (ex: un numéro Vinted Go
+ * que 17TRACK avait pris pour un numéro APC), puis lui transmet le code postal s'il est exigé. 17TRACK
+ * limite à 5 les changements de transporteur d'un même numéro.
+ */
+export async function changeCarrier(apiKey: string, query: ParcelQuery, locale: Locale): Promise<void> {
+  const { number, carrier, destination_postal_code } = trackRequest(query);
+  if (!carrier) return;
+
+  const changed = await post<ApiResponse>('changecarrier', apiKey, [{ number, carrier_new: carrier }], locale);
+  const rejection = changed.data?.rejected?.[0]?.error;
+  if (rejection) {
+    console.warn('Changement de transporteur rejeté par 17TRACK :', rejection.code, rejection.message);
+    throw rejectionError(rejection.code, locale);
+  }
+
+  if (destination_postal_code) {
+    const updated = await post<ApiResponse>(
+      'changeinfo',
+      apiKey,
+      [{ number, carrier, items: { destination_postal_code } }],
+      locale
+    );
+    const refused = updated.data?.rejected?.[0]?.error;
+    if (refused) {
+      console.warn('Code postal rejeté par 17TRACK :', refused.code, refused.message);
+      throw rejectionError(refused.code, locale);
+    }
+  }
 }
 
 export function mapStatus(raw: string | null | undefined, subStatus?: string | null): TrackingStatus {

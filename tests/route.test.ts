@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { calledEndpoints, mock17track, NOT_REGISTERED_REPLY, silenceConsole } from './helpers';
+import { calledEndpoints, mock17track, NOT_REGISTERED_REPLY, sentBody, silenceConsole } from './helpers';
 
 // La route garde des caches et des limiteurs au niveau du module : chaque test repart d'un module neuf
 async function loadRoute() {
@@ -10,8 +10,8 @@ async function loadRoute() {
 
 let ipCounter = 0;
 
-function request(number: string, headers: Record<string, string> = {}) {
-  const req = new Request(`https://parcel.test/api/track/${encodeURIComponent(number)}`, {
+function request(number: string, headers: Record<string, string> = {}, search = '') {
+  const req = new Request(`https://parcel.test/api/track/${encodeURIComponent(number)}${search}`, {
     headers: {
       host: 'parcel.test',
       'x-parcel-tracker': '1',
@@ -176,5 +176,102 @@ describe('GET /api/track/[number]', () => {
     expect(response.status).toBe(502);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(await response.json()).toMatchObject({ code: 'upstream_http', detail: 500 });
+  });
+
+  describe('numéro Mondial Relay seul (code postal demandé dans un second temps)', () => {
+    it('demande le code postal d’un numéro inconnu, sans rien enregistrer ni consulter le quota', async () => {
+      const GET = await loadRoute();
+      const fetchMock = mock17track({ gettrackinfo: [NOT_REGISTERED_REPLY] });
+
+      const response = await GET(...request('12345678'));
+      expect(response.status).toBe(422);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(await response.json()).toMatchObject({ code: 'postal_code_required', carrier: 'mondial-relay' });
+      expect(calledEndpoints(fetchMock)).toEqual(['gettrackinfo']);
+    });
+
+    it('affiche directement un numéro déjà suivi, sans demander de code postal', async () => {
+      const GET = await loadRoute();
+      mock17track({ gettrackinfo: [READY_REPLY] });
+      expect((await GET(...request('12345678'))).status).toBe(200);
+    });
+
+    it('enregistre le numéro comme Mondial Relay une fois le code postal saisi', async () => {
+      const GET = await loadRoute();
+      const fetchMock = mock17track({
+        gettrackinfo: [NOT_REGISTERED_REPLY],
+        getquota: [{ code: 0, data: { quota_remain: 100, today_used: 0 } }],
+        register: [{ code: 0, data: { accepted: [{}], rejected: [] } }],
+      });
+
+      expect((await GET(...request('12345678', {}, '?postcode=75001'))).status).toBe(202);
+      expect(sentBody(fetchMock, 2)).toEqual([{ number: '12345678', carrier: 100304, destination_postal_code: '75001' }]);
+    });
+
+    it('demande le code postal quand 17TRACK le réclame pour un autre transporteur', async () => {
+      const GET = await loadRoute();
+      mock17track({
+        gettrackinfo: [NOT_REGISTERED_REPLY],
+        getquota: [{ code: 0, data: { quota_remain: 100, today_used: 0 } }],
+        register: [{ code: 0, data: { rejected: [{ error: { code: -18010019 } }] } }],
+      });
+
+      const response = await GET(...request('AB123456789'));
+      expect(response.status).toBe(422);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: 'postal_code_required' });
+      expect(body.carrier).toBeUndefined();
+    });
+  });
+
+  describe('avec un lien de suivi (transporteur et code postal)', () => {
+    const OK = { code: 0, data: { accepted: [{}], rejected: [] } };
+
+    it('enregistre un numéro Mondial Relay avec son transporteur et son code postal', async () => {
+      const GET = await loadRoute();
+      const fetchMock = mock17track({
+        gettrackinfo: [NOT_REGISTERED_REPLY],
+        getquota: [{ code: 0, data: { quota_remain: 100, today_used: 0 } }],
+        register: [OK],
+      });
+
+      const response = await GET(...request('12345678', {}, '?carrier=mondial-relay&postcode=75001'));
+      expect(response.status).toBe(202);
+      expect(sentBody(fetchMock, 0)).toEqual([{ number: '12345678', carrier: 100304 }]);
+      expect(sentBody(fetchMock, 2)).toEqual([{ number: '12345678', carrier: 100304, destination_postal_code: '75001' }]);
+    });
+
+    it('réattribue une seule fois un numéro enregistré sous le mauvais transporteur, sans toucher au quota', async () => {
+      const GET = await loadRoute();
+      const fetchMock = mock17track({
+        gettrackinfo: [{ code: 0, data: { accepted: [], rejected: [{ error: { code: -18019910 } }] } }],
+        changecarrier: [OK],
+      });
+
+      expect((await GET(...request('1234567890123456', {}, '?carrier=vinted-go'))).status).toBe(202);
+      expect((await GET(...request('1234567890123456', {}, '?carrier=vinted-go'))).status).toBe(202);
+      expect(calledEndpoints(fetchMock)).toEqual(['gettrackinfo', 'changecarrier', 'gettrackinfo']);
+    });
+
+    it('ne partage pas le cache entre un numéro seul et le même numéro avec son transporteur', async () => {
+      const GET = await loadRoute();
+      const fetchMock = mock17track({ gettrackinfo: [READY_REPLY] });
+
+      await GET(...request('1234567890123456'));
+      await GET(...request('1234567890123456', {}, '?carrier=vinted-go'));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['un transporteur inconnu', '?carrier=ups'],
+      ['un code postal impossible', '?carrier=mondial-relay&postcode=75%2F001'],
+    ])('refuse %s sans appeler 17TRACK', async (_, search) => {
+      const GET = await loadRoute();
+      const fetchMock = mock17track({});
+
+      const response = await GET(...request('12345678', {}, search));
+      expect(response.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });
